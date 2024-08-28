@@ -26,7 +26,11 @@ CURRENT_TABLE_NAME = os.getenv('CURRENT_TABLE_NAME')
 # PostgreSQL connection string
 DATABASE_URL = f"postgresql://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}"
 
+print(os.getcwd())  # Print current working directory
+
 def load_data_from_google_sheet():
+    logging.info(f"SPREADSHEET_ID: {SPREADSHEET_ID}")
+    logging.info(f"SHEET_NAME: {SHEET_NAME}")    
     try:
         creds = Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE)
         service = build('sheets', 'v4', credentials=creds)
@@ -60,10 +64,12 @@ def split_dependencies_and_unroll(df):
         df['Dependency'] = df['Dependency'].str.split(', ')
         df = df.explode('Dependency')
         
-        df['Total Funding (m)'] = pd.to_numeric(df['Total Funding (m)'], errors='coerce')
-        
-        df['Start Year'] = pd.to_datetime(df['Start Year'], format='%Y', errors='coerce')
-        df['End Year'] = pd.to_datetime(df['End Year'], format='%Y', errors='coerce')
+        # df['Total Funding (m)'] = df['Total Funding (m)'].replace({r'\\\$': '', ',': ''}, regex=True)
+        df['Total Funding (m)'] = df['Total Funding (m)'].replace({r'[^\d.]': ''}, regex=True)
+        df['Total Funding (m)'] = pd.to_numeric(df['Total Funding (m)'], errors='coerce')        
+
+        df['Start Year'] = pd.to_datetime(df['Start Year'], format='%Y', errors='coerce').dt.to_period('M').dt.to_timestamp(how='start')  # Convert to first day of the month
+        df['End Year'] = pd.to_datetime(df['End Year'], format='%Y', errors='coerce').dt.to_period('M').dt.to_timestamp(how='end')  # Convert to last day of the month
         
         df = add_before_after_states(df)
         
@@ -120,8 +126,8 @@ def create_and_populate_all_programs_table(df, engine):
                     "Status" TEXT,
                     "Companies" TEXT,
                     "Total Funding (m)" DOUBLE PRECISION,
-                    "Start Year" TIMESTAMP WITHOUT TIME ZONE,
-                    "End Year" TIMESTAMP WITHOUT TIME ZONE,
+                    "Start Year" DATE,
+                    "End Year" DATE,
                     "ID" TEXT,
                     "Dependency" TEXT,
                     "Theme" TEXT,
@@ -136,6 +142,9 @@ def create_and_populate_all_programs_table(df, engine):
         # Insert the data into the all_programs table
         df.to_sql('all_programs', engine, if_exists='append', index=False, method='multi', chunksize=1000)
         logging.info("All programs table populated successfully.")
+
+        # Output the number of rows inserted
+        logging.info(f"Inserted {len(df)} rows into the all_programs table.")
     except Exception as e:
         logging.error(f"An error occurred while creating or populating all_programs table: {e}")
 
