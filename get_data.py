@@ -102,6 +102,43 @@ def generate_sankey_output(df):
         logging.error(f"An error occurred while generating Sankey output: {e}")
         return ""
 
+def create_and_populate_all_programs_table(df, engine):
+    try:
+        # Drop the all_programs table to completely replace it
+        with engine.connect() as conn:
+            conn.execute(text("DROP TABLE IF EXISTS all_programs CASCADE"))
+            conn.commit()  # Ensure the drop command is committed
+
+        # Create the all_programs table with Before State and After State columns
+        with engine.connect() as conn:
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS all_programs (
+                    "Program Name" TEXT,
+                    "Org" TEXT,
+                    "Description" TEXT,
+                    "Impact" TEXT,
+                    "Status" TEXT,
+                    "Companies" TEXT,
+                    "Total Funding (m)" DOUBLE PRECISION,
+                    "Start Year" TIMESTAMP WITHOUT TIME ZONE,
+                    "End Year" TIMESTAMP WITHOUT TIME ZONE,
+                    "ID" TEXT,
+                    "Dependency" TEXT,
+                    "Theme" TEXT,
+                    "Importance" TEXT,
+                    "Notes with Applied" TEXT,
+                    "Before State" TEXT,
+                    "After State" TEXT
+                )
+            """))
+            conn.commit()  # Ensure the create command is committed
+
+        # Insert the data into the all_programs table
+        df.to_sql('all_programs', engine, if_exists='append', index=False, method='multi', chunksize=1000)
+        logging.info("All programs table populated successfully.")
+    except Exception as e:
+        logging.error(f"An error occurred while creating or populating all_programs table: {e}")
+
 def create_and_populate_company_tables(df, engine):
     try:
         # Drop the tables to completely replace them
@@ -128,16 +165,33 @@ def create_and_populate_company_tables(df, engine):
             """))
             conn.commit()  # Ensure the create commands are committed
 
-        # Extract and prepare company names and program-company relationships
-        company_names = df['company_name'].unique()
-        program_company_rows = df[['program_id', 'company_name']].drop_duplicates().to_dict('records')
+        # Extract and split company names
+        company_names = set()
+        program_company_rows = []
+        for _, row in df.iterrows():
+            program_id = row['ID']
+            companies = row['Companies']
+            if pd.notna(companies):
+                for company in set(companies.split(', ')):
+                    company = company.strip()
+                    company_names.add(company)
+                    program_company_rows.append({'program_id': program_id, 'company_name': company})
 
-        # Insert companies into the 'company' table
+        # Insert unique companies into the 'company' table
         company_df = pd.DataFrame(list(company_names), columns=['name'])
         company_df.to_sql('company', engine, if_exists='append', index=False, method='multi', chunksize=1000)
         
+        # Create a mapping of company names to IDs
+        with engine.connect() as conn:
+            company_map = pd.read_sql('SELECT id, name FROM company', conn)
+            company_map = dict(zip(company_map['name'], company_map['id']))
+
         # Populate the 'program_company' join table
-        program_company_df = pd.DataFrame(program_company_rows)
+        program_company_rows = [{'program_id': row['program_id'], 'company_id': company_map[row['company_name']]} 
+                                for row in program_company_rows if row['company_name'] in company_map]
+        
+        # Remove duplicates from program_company_rows
+        program_company_df = pd.DataFrame(program_company_rows).drop_duplicates()
         program_company_df.to_sql('program_company', engine, if_exists='append', index=False, method='multi', chunksize=1000)
         
         logging.info("Company and program_company tables populated successfully.")
@@ -165,6 +219,10 @@ if __name__ == "__main__":
     
     # Create SQLAlchemy engine to connect to PostgreSQL
     engine = create_engine(DATABASE_URL)
+    
+    # Populate all_programs table
+    logging.info("Creating and populating all_programs table...")
+    create_and_populate_all_programs_table(processed_df, engine)
     
     # Populate company and program_company tables
     logging.info("Creating and populating company tables...")
