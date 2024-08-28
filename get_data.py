@@ -200,26 +200,73 @@ def create_and_populate_sankey_data_table(df, engine):
             level = 0
             current_program = program
 
-            while True:
-                dependencies = df[df['Program Name'] == current_program]['Dependency'].dropna().tolist()
-                if not dependencies or dependencies == [current_program]:
-                    break
+            # Use a set to track visited programs to avoid infinite loops
+            visited_programs = set()
 
-                for dep in dependencies:
-                    if dep == current_program:
-                        continue
+            while True:
+                if current_program in visited_programs:
+                    # If we detect a loop, terminate by linking back to the program itself
                     sankey_rows.append({
                         'Source': current_program,
-                        'Target': dep,
+                        'Target': current_program,
                         'Level': level,
                         'Value': df[df['Program Name'] == current_program]['Total Funding (m)'].sum(),
-                        'Theme': df[df['Program Name'] == current_program]['Theme'].values[0],
+                        'Theme': df[df['Program Name'] == current_program]['Theme'].values[0] if not df[df['Program Name'] == current_program]['Theme'].empty else None,
                         'Total Funding (m)': df[df['Program Name'] == current_program]['Total Funding (m)'].sum(),
                         'Start Year': df[df['Program Name'] == current_program]['Start Year'].min(),
                         'End Year': df[df['Program Name'] == current_program]['End Year'].max()
                     })
-                    current_program = dep
-                    level += 1
+                    break
+
+                visited_programs.add(current_program)
+                dependencies = df[df['Program Name'] == current_program]['Dependency'].dropna().tolist()
+                
+                if not dependencies:
+                    # If there are no dependencies, link the program to itself
+                    sankey_rows.append({
+                        'Source': current_program,
+                        'Target': current_program,
+                        'Level': level,
+                        'Value': df[df['Program Name'] == current_program]['Total Funding (m)'].sum(),
+                        'Theme': df[df['Program Name'] == current_program]['Theme'].values[0] if not df[df['Program Name'] == current_program]['Theme'].empty else None,
+                        'Total Funding (m)': df[df['Program Name'] == current_program]['Total Funding (m)'].sum(),
+                        'Start Year': df[df['Program Name'] == current_program]['Start Year'].min(),
+                        'End Year': df[df['Program Name'] == current_program]['End Year'].max()
+                    })
+                    break
+
+                next_program = None
+                for dep in dependencies:
+                    if dep != current_program:
+                        sankey_rows.append({
+                            'Source': current_program,
+                            'Target': dep,
+                            'Level': level,
+                            'Value': df[df['Program Name'] == current_program]['Total Funding (m)'].sum(),
+                            'Theme': df[df['Program Name'] == current_program]['Theme'].values[0] if not df[df['Program Name'] == current_program]['Theme'].empty else None,
+                            'Total Funding (m)': df[df['Program Name'] == current_program]['Total Funding (m)'].sum(),
+                            'Start Year': df[df['Program Name'] == current_program]['Start Year'].min(),
+                            'End Year': df[df['Program Name'] == current_program]['End Year'].max()
+                        })
+                        next_program = dep
+                        level += 1
+                        break
+
+                if not next_program or next_program == current_program:
+                    # If no new program is found or if it loops back to the current, terminate
+                    sankey_rows.append({
+                        'Source': current_program,
+                        'Target': current_program,
+                        'Level': level,
+                        'Value': df[df['Program Name'] == current_program]['Total Funding (m)'].sum(),
+                        'Theme': df[df['Program Name'] == current_program]['Theme'].values[0] if not df[df['Program Name'] == current_program]['Theme'].empty else None,
+                        'Total Funding (m)': df[df['Program Name'] == current_program]['Total Funding (m)'].sum(),
+                        'Start Year': df[df['Program Name'] == current_program]['Start Year'].min(),
+                        'End Year': df[df['Program Name'] == current_program]['End Year'].max()
+                    })
+                    break
+
+                current_program = next_program
 
         sankey_df = pd.DataFrame(sankey_rows).drop_duplicates()
         sankey_df.to_sql('sankey_data', engine, if_exists='append', index=False, method='multi', chunksize=1000)
@@ -227,6 +274,7 @@ def create_and_populate_sankey_data_table(df, engine):
         logging.info("Sankey data table populated successfully.")
     except Exception as e:
         logging.error(f"An error occurred while creating or populating sankey_data table: {e}")
+
 
 if __name__ == "__main__":
     logging.info("Loading data from Google Sheets...")
