@@ -104,38 +104,39 @@ def generate_sankey_output(df):
 
 def create_and_populate_company_tables(df, engine):
     try:
-        # Truncate the tables to remove existing data while keeping the table structures intact
+        # Drop the tables to completely replace them
         with engine.connect() as conn:
-            conn.execute(text("TRUNCATE TABLE program_company"))
-            conn.execute(text("TRUNCATE TABLE company CASCADE"))
+            conn.execute(text("DROP TABLE IF EXISTS program_company"))
+            conn.execute(text("DROP TABLE IF EXISTS company CASCADE"))
+            conn.commit()  # Ensure the drop commands are committed
 
-        # Extract unique company names
-        company_names = set()
-        for companies in df['Companies']:
-            if pd.notna(companies):
-                for company in companies.split(', '):
-                    company_names.add(company.strip())
+        # Recreate the tables
+        with engine.connect() as conn:
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS company (
+                    id SERIAL PRIMARY KEY,
+                    name TEXT UNIQUE
+                )
+            """))
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS program_company (
+                    program_id TEXT,
+                    company_id INT,
+                    PRIMARY KEY (program_id, company_id),
+                    FOREIGN KEY (company_id) REFERENCES company(id)
+                )
+            """))
+            conn.commit()  # Ensure the create commands are committed
 
-        # Insert unique companies into the 'company' table
+        # Extract and prepare company names and program-company relationships
+        company_names = df['company_name'].unique()
+        program_company_rows = df[['program_id', 'company_name']].drop_duplicates().to_dict('records')
+
+        # Insert companies into the 'company' table
         company_df = pd.DataFrame(list(company_names), columns=['name'])
         company_df.to_sql('company', engine, if_exists='append', index=False, method='multi', chunksize=1000)
         
-        # Create a mapping of company names to IDs
-        with engine.connect() as conn:
-            company_map = pd.read_sql('SELECT id, name FROM company', conn)
-            company_map = dict(zip(company_map['name'], company_map['id']))
-
         # Populate the 'program_company' join table
-        program_company_rows = []
-        for _, row in df.iterrows():
-            program_id = row['ID']
-            companies = row['Companies']
-            if pd.notna(companies):
-                for company in companies.split(', '):
-                    company_id = company_map.get(company.strip())
-                    if company_id:
-                        program_company_rows.append({'program_id': program_id, 'company_id': company_id})
-
         program_company_df = pd.DataFrame(program_company_rows)
         program_company_df.to_sql('program_company', engine, if_exists='append', index=False, method='multi', chunksize=1000)
         
