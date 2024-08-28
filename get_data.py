@@ -1,6 +1,6 @@
 import os
 import pandas as pd
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 from dotenv import load_dotenv
@@ -74,7 +74,8 @@ def split_dependencies_and_unroll(df):
 
 def add_before_after_states(df):
     df['Before State'] = df['Program Name']
-    df['After State'] = df['Dependency'].fillna('End')  # Use 'End' if no dependency exists
+    # Set 'After State' to dependency if it exists; otherwise, set to the same as 'Before State'
+    df['After State'] = df['Dependency'].fillna(df['Before State'])
     return df
 
 def generate_sankey_output(df):
@@ -92,7 +93,7 @@ def generate_sankey_output(df):
             if not before_state or not after_state or pd.isna(funding):
                 continue
 
-            # Format the line for the sankey diagram, including additional context
+            # Format the line for the Sankey diagram, including additional context
             line = f"{before_state} [{int(funding)}] {after_state} // Org: {org}, Theme: {theme}"
             output_lines.append(line)
         
@@ -100,6 +101,42 @@ def generate_sankey_output(df):
     except Exception as e:
         logging.error(f"An error occurred while generating Sankey output: {e}")
         return ""
+
+def create_and_populate_company_tables(df, engine):
+    try:
+        # Extract unique company names
+        company_names = set()
+        for companies in df['Companies']:
+            if pd.notna(companies):
+                for company in companies.split(', '):
+                    company_names.add(company.strip())
+
+        # Insert companies into the 'company' table
+        company_df = pd.DataFrame(list(company_names), columns=['name'])
+        company_df.to_sql('company', engine, if_exists='replace', index=False)
+        
+        # Create a mapping of company names to IDs
+        with engine.connect() as conn:
+            company_map = pd.read_sql('SELECT id, name FROM company', conn)
+            company_map = dict(zip(company_map['name'], company_map['id']))
+
+        # Populate the 'program_company' join table
+        program_company_rows = []
+        for _, row in df.iterrows():
+            program_id = row['ID']
+            companies = row['Companies']
+            if pd.notna(companies):
+                for company in companies.split(', '):
+                    company_id = company_map.get(company.strip())
+                    if company_id:
+                        program_company_rows.append({'program_id': program_id, 'company_id': company_id})
+
+        program_company_df = pd.DataFrame(program_company_rows)
+        program_company_df.to_sql('program_company', engine, if_exists='replace', index=False)
+        
+        logging.info("Company and program_company tables populated successfully.")
+    except Exception as e:
+        logging.error(f"An error occurred while populating company tables: {e}")
 
 if __name__ == "__main__":
     logging.info("Loading data from Google Sheets...")
@@ -119,3 +156,12 @@ if __name__ == "__main__":
         file.write(sankey_output)
     
     logging.info("Sankey diagram data has been written to sankey_diagram.txt")
+    
+    # Create SQLAlchemy engine to connect to PostgreSQL
+    engine = create_engine(DATABASE_URL)
+    
+    # Populate company and program_company tables
+    logging.info("Creating and populating company tables...")
+    create_and_populate_company_tables(processed_df, engine)
+    
+    logging.info("Process completed successfully.")
