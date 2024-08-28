@@ -124,6 +124,9 @@ def create_and_populate_sankey_data_table(df, engine):
         # Drop columns with all nulls
         sankey_df = sankey_df.dropna(axis=1, how='all')
 
+        # Log the columns being inserted to catch any unintended columns like level_7
+        logging.info(f"Columns to insert into sankey_data table: {sankey_df.columns.tolist()}")
+
         sankey_df.to_sql('sankey_data', engine, if_exists='append', index=False, method='multi', chunksize=1000)
         logging.info("Sankey data table populated successfully.")
 
