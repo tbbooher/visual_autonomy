@@ -1,5 +1,3 @@
-# data_formatter.py
-
 import pandas as pd
 import logging
 from sqlalchemy import text
@@ -46,6 +44,7 @@ def create_and_populate_all_programs_table(df, engine):
         with engine.connect() as conn:
             conn.execute(text("""
                 CREATE TABLE IF NOT EXISTS all_programs (
+                    id SERIAL PRIMARY KEY,  -- Change ID to be a primary key
                     "Program Name" TEXT,
                     "Org" TEXT,
                     "Description" TEXT,
@@ -55,7 +54,6 @@ def create_and_populate_all_programs_table(df, engine):
                     "Total Funding (m)" DOUBLE PRECISION,
                     "Start Year" DATE,
                     "End Year" DATE,
-                    "ID" TEXT,
                     "Dependency" TEXT,
                     "Theme" TEXT,
                     "Importance" TEXT,
@@ -66,11 +64,51 @@ def create_and_populate_all_programs_table(df, engine):
             """))
             conn.commit()
 
+        df['ID'] = pd.to_numeric(df['ID'], errors='coerce').fillna(0).astype(int)  # Ensure ID is numeric and not null
         df.to_sql('all_programs', engine, if_exists='append', index=False, method='multi', chunksize=1000)
         logging.info("All programs table populated successfully.")
         logging.info(f"Inserted {len(df)} rows into the all_programs table.")
     except Exception as e:
         logging.error(f"An error occurred while creating or populating all_programs table: {e}")
+
+
+def create_and_populate_dependency_table(df, engine):
+    """
+    Create and populate the 'program_dependencies' table in the PostgreSQL database.
+    This table establishes relationships between programs and their dependencies.
+    """
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("DROP TABLE IF EXISTS program_dependencies CASCADE"))
+            conn.commit()
+
+        with engine.connect() as conn:
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS program_dependencies (
+                    id SERIAL PRIMARY KEY,
+                    program_id INT,  -- Use INT to match the 'id' column in all_programs
+                    dependency_id INT,  -- Use INT to match the 'id' column in all_programs
+                    UNIQUE (program_id, dependency_id),
+                    FOREIGN KEY (program_id) REFERENCES all_programs(id),
+                    FOREIGN KEY (dependency_id) REFERENCES all_programs(id)
+                )
+            """))
+            conn.commit()
+
+        # Filter for rows where there is a valid dependency
+        dependency_df = df[df['Dependency'].notna() & (df['Dependency'] != '')].copy()
+        dependency_df = dependency_df[['ID', 'Dependency']].drop_duplicates()
+
+        dependency_df.columns = ['program_id', 'dependency_id']
+        dependency_df['program_id'] = pd.to_numeric(dependency_df['program_id'], errors='coerce').fillna(0).astype(int)
+        dependency_df['dependency_id'] = pd.to_numeric(dependency_df['dependency_id'], errors='coerce').fillna(0).astype(int)
+
+        dependency_df.to_sql('program_dependencies', engine, if_exists='append', index=False, method='multi', chunksize=1000)
+        
+        logging.info("Program dependencies table populated successfully.")
+    except Exception as e:
+        logging.error(f"An error occurred while creating or populating program_dependencies table: {e}")
+
 
 def create_and_populate_company_tables(df, engine):
     """

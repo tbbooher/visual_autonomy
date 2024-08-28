@@ -7,8 +7,14 @@ from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 from dotenv import load_dotenv
 import logging
-from data_formatter import split_dependencies_and_unroll, create_and_populate_all_programs_table, create_and_populate_company_tables
-from process_sankey import create_and_populate_sankey_data_table  # Import from process_sankey.py
+# create_and_populate_dependency_table
+from data_formatter import (
+    split_dependencies_and_unroll,
+    create_and_populate_all_programs_table,
+    create_and_populate_company_tables,
+    create_and_populate_dependency_table,  # Import the new function
+)
+from process_sankey import create_and_populate_sankey_data_table
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -79,7 +85,10 @@ if __name__ == "__main__":
     logging.info("Creating and populating company tables...")
     create_and_populate_company_tables(processed_df, engine)
     
-    logging.info("Creating and populating sankey_data table...")
-    create_and_populate_sankey_data_table(processed_df, engine)
+    # logging.info("Creating and populating sankey_data table...")
+    # create_and_populate_sankey_data_table(processed_df, engine)
+    
+    logging.info("Creating and populating program_dependencies table...")
+    create_and_populate_dependency_table(processed_df, engine)
     
     logging.info("Process completed successfully.")
