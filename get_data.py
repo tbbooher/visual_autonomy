@@ -104,6 +104,11 @@ def generate_sankey_output(df):
 
 def create_and_populate_company_tables(df, engine):
     try:
+        # Truncate the tables to avoid foreign key constraint issues
+        with engine.connect() as conn:
+            conn.execute(text("TRUNCATE TABLE program_company"))
+            conn.execute(text("TRUNCATE TABLE company CASCADE"))
+        
         # Extract unique company names
         company_names = set()
         for companies in df['Companies']:
@@ -113,7 +118,7 @@ def create_and_populate_company_tables(df, engine):
 
         # Insert companies into the 'company' table
         company_df = pd.DataFrame(list(company_names), columns=['name'])
-        company_df.to_sql('company', engine, if_exists='replace', index=False)
+        company_df.to_sql('company', engine, if_exists='append', index=False)
         
         # Create a mapping of company names to IDs
         with engine.connect() as conn:
@@ -132,7 +137,7 @@ def create_and_populate_company_tables(df, engine):
                         program_company_rows.append({'program_id': program_id, 'company_id': company_id})
 
         program_company_df = pd.DataFrame(program_company_rows)
-        program_company_df.to_sql('program_company', engine, if_exists='replace', index=False)
+        program_company_df.to_sql('program_company', engine, if_exists='append', index=False)
         
         logging.info("Company and program_company tables populated successfully.")
     except Exception as e:
