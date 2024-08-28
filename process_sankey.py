@@ -4,13 +4,15 @@ from sqlalchemy import text
 
 def build_sankey_rows(program_name, current_level, df, sankey_rows, visited, id_to_name, levels_dict):
     """Recursive function to determine levels and build source-target relationships for the Sankey diagram."""
+    if current_level > 6:  # Prevent going beyond 6 levels
+        return
+
     program_rows = df[df['Program Name'] == program_name]
 
     if program_rows.empty or program_name in visited:
         logging.info(f"No further dependencies for {program_name} or already visited.")
-        # Switch level order: Ensure it only goes up to level 5, starting from level_5
-        levels = [None] * (5 - current_level) + [program_name] + [None] * (current_level - 1)
-        levels = levels[-5:]  # Ensure exactly 5 levels
+        levels = [None] * (6 - current_level) + [program_name] + [None] * (current_level - 1)
+        levels = levels[-6:]  # Keep only 6 levels
         levels_dict[program_name] = levels
         sankey_rows.append({
             'source': program_name,
@@ -26,8 +28,8 @@ def build_sankey_rows(program_name, current_level, df, sankey_rows, visited, id_
         return
 
     visited.add(program_name)
-    levels = [None] * (5 - current_level) + [program_name] + [None] * (current_level - 1)
-    levels = levels[-5:]  # Ensure exactly 5 levels
+    levels = [None] * (6 - current_level) + [program_name] + [None] * (current_level - 1)
+    levels = levels[-6:]  # Ensure exactly 6 levels
     levels_dict[program_name] = levels
 
     for _, row in program_rows.iterrows():
@@ -35,8 +37,8 @@ def build_sankey_rows(program_name, current_level, df, sankey_rows, visited, id_
 
         if not dependencies or dependencies == ['']:
             logging.info(f"No dependencies for {row['Program Name']}. Terminating at self.")
-            levels = levels_dict[program_name][:5-current_level] + [row['Program Name']] + [None] * (5 - current_level)
-            levels = levels[-5:]  # Ensure exactly 5 levels
+            levels = levels_dict[program_name][:6-current_level] + [row['Program Name']] + [None] * (6 - current_level)
+            levels = levels[-6:]  # Ensure only 6 levels
             levels_dict[row['Program Name']] = levels
             sankey_rows.append({
                 'source': row['Program Name'],
@@ -55,8 +57,8 @@ def build_sankey_rows(program_name, current_level, df, sankey_rows, visited, id_
                 if dependency.isdigit():
                     dependency_name = id_to_name.get(dependency, None)
                     if dependency_name:
-                        levels = levels_dict[program_name][:5-current_level] + [dependency_name] + [None] * (current_level - 1)
-                        levels = levels[-5:]  # Ensure exactly 5 levels
+                        levels = levels_dict[program_name][:6-current_level] + [dependency_name] + [None] * (current_level - 1)
+                        levels = levels[-6:]  # Ensure only 6 levels
                         levels_dict[dependency_name] = levels
                         sankey_rows.append({
                             'source': dependency_name,
@@ -69,7 +71,7 @@ def build_sankey_rows(program_name, current_level, df, sankey_rows, visited, id_
                             'end_year': row['End Year'],
                             **{f'level_{i+1}': level_name for i, level_name in enumerate(levels, start=1) if level_name is not None}
                         })
-                        # Stop at transition: If it transitions to another, do not continue deeper
+                        # Stop recursion at transition to prevent extra levels
                         return
                     else:
                         logging.warning(f"Dependency ID '{dependency}' not found in Program Names. Skipping.")
@@ -83,7 +85,7 @@ def create_and_populate_sankey_data_table(df, engine):
             conn.execute(text("DROP TABLE IF EXISTS sankey_data CASCADE"))
             conn.commit()
 
-        # Create the sankey_data table
+        # Create the sankey_data table with up to 6 levels
         with engine.connect() as conn:
             conn.execute(text("""
                 CREATE TABLE IF NOT EXISTS sankey_data (
@@ -99,7 +101,8 @@ def create_and_populate_sankey_data_table(df, engine):
                     level_2 TEXT,
                     level_3 TEXT,
                     level_4 TEXT,
-                    level_5 TEXT
+                    level_5 TEXT,
+                    level_6 TEXT
                 )
             """))
             conn.commit()
