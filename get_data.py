@@ -191,37 +191,40 @@ def create_and_populate_sankey_data_table(df, engine):
             conn.commit()
 
         sankey_rows = []
-        for index, row in df.iterrows():
-            source = row['Before State']
-            target = row['After State']
-            value = row['Total Funding (m)']
-            theme = row['Theme']
-            start_year = row['Start Year']
-            end_year = row['End Year']
+
+        # Find all unique programs to handle the dependencies correctly
+        all_programs = df['Program Name'].unique()
+        
+        # Process each program to trace its dependency chain
+        for program in all_programs:
             level = 0
+            current_program = program
 
-            if source != target:
-                current = source
-                while current != target and current in df['Before State'].values:
+            while True:
+                dependencies = df[df['Program Name'] == current_program]['Dependency'].dropna().tolist()
+                if not dependencies or dependencies == [current_program]:
+                    break
+
+                for dep in dependencies:
+                    if dep == current_program:
+                        continue
+                    sankey_rows.append({
+                        'Source': current_program,
+                        'Target': dep,
+                        'Level': level,
+                        'Value': df[df['Program Name'] == current_program]['Total Funding (m)'].sum(),
+                        'Theme': df[df['Program Name'] == current_program]['Theme'].values[0],
+                        'Total Funding (m)': df[df['Program Name'] == current_program]['Total Funding (m)'].sum(),
+                        'Start Year': df[df['Program Name'] == current_program]['Start Year'].min(),
+                        'End Year': df[df['Program Name'] == current_program]['End Year'].max()
+                    })
+                    current_program = dep
                     level += 1
-                    current = df[df['Before State'] == current]['After State'].values[0]
-            
-            sankey_rows.append({
-                'Source': source,
-                'Target': target,
-                'Level': level,
-                'Value': value,
-                'Theme': theme,
-                'Total Funding (m)': value,
-                'Start Year': start_year,
-                'End Year': end_year
-            })
 
-        sankey_df = pd.DataFrame(sankey_rows)
-
+        sankey_df = pd.DataFrame(sankey_rows).drop_duplicates()
         sankey_df.to_sql('sankey_data', engine, if_exists='append', index=False, method='multi', chunksize=1000)
+        
         logging.info("Sankey data table populated successfully.")
-
     except Exception as e:
         logging.error(f"An error occurred while creating or populating sankey_data table: {e}")
 
@@ -234,8 +237,6 @@ if __name__ == "__main__":
     
     logging.info("Splitting dependencies and unrolling data...")
     processed_df = split_dependencies_and_unroll(data_df)
-    
-    logging.info("Sankey diagram data has been written to sankey_diagram.txt")
     
     engine = create_engine(DATABASE_URL)
     
