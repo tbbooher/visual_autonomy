@@ -28,12 +28,10 @@ DATABASE_URL = f"postgresql://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_HOST
 
 def load_data_from_google_sheet():
     try:
-        # Authenticate and connect to Google Sheets API
         creds = Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE)
         service = build('sheets', 'v4', credentials=creds)
         sheet = service.spreadsheets()
 
-        # Read data from Google Sheet
         result = sheet.values().get(spreadsheetId=SPREADSHEET_ID, range=SHEET_NAME).execute()
         values = result.get('values', [])
         
@@ -41,7 +39,6 @@ def load_data_from_google_sheet():
             logging.error("No data found in the Google Sheet.")
             return None
         
-        # Ensure all rows have the correct number of columns
         expected_num_columns = len(values[0])
         cleaned_values = []
         for row in values[1:]:
@@ -51,7 +48,6 @@ def load_data_from_google_sheet():
                 row = row[:expected_num_columns]  # Truncate extra values
             cleaned_values.append(row)
         
-        # Convert data to a pandas DataFrame
         df = pd.DataFrame(cleaned_values, columns=values[0])  # Use first row as column names
         return df
 
@@ -61,38 +57,65 @@ def load_data_from_google_sheet():
 
 def split_dependencies_and_unroll(df):
     try:
-        # Split the 'Dependency' column into multiple rows
         df['Dependency'] = df['Dependency'].str.split(', ')
         df = df.explode('Dependency')
+        
+        df['Total Funding (m)'] = pd.to_numeric(df['Total Funding (m)'], errors='coerce')
+        
+        df['Start Year'] = pd.to_datetime(df['Start Year'], format='%Y', errors='coerce')
+        df['End Year'] = pd.to_datetime(df['End Year'], format='%Y', errors='coerce')
+        
+        df = add_before_after_states(df)
+        
         return df
     except Exception as e:
-        logging.error(f"An error occurred while splitting dependencies: {e}")
-        return df  # Return the original DataFrame if something goes wrong
+        logging.error(f"An error occurred while processing data: {e}")
+        return df
 
-def load_data_into_postgres(df):
+def add_before_after_states(df):
+    df['Before State'] = df['Program Name']
+    df['After State'] = df['Dependency'].fillna('End')  # Use 'End' if no dependency exists
+    return df
+
+def generate_sankey_output(df):
     try:
-        # Create SQLAlchemy engine to connect to PostgreSQL
-        engine = create_engine(DATABASE_URL)
+        output_lines = []
+
+        for _, row in df.iterrows():
+            before_state = row['Before State']
+            after_state = row['After State']
+            funding = row['Total Funding (m)']
+            org = row['Org']
+            theme = row['Theme']
+
+            # Skip rows without proper values
+            if not before_state or not after_state or pd.isna(funding):
+                continue
+
+            # Format the line for the sankey diagram, including additional context
+            line = f"{before_state} [{int(funding)}] {after_state} // Org: {org}, Theme: {theme}"
+            output_lines.append(line)
         
-        # Load DataFrame into PostgreSQL (create table if it doesn't exist, append data if it does)
-        df.to_sql(CURRENT_TABLE_NAME, engine, if_exists='replace', index=False)
-        logging.info("Data loaded into PostgreSQL successfully.")
+        return "\n".join(output_lines)
     except Exception as e:
-        logging.error(f"An error occurred while loading data into PostgreSQL: {e}")
+        logging.error(f"An error occurred while generating Sankey output: {e}")
+        return ""
 
 if __name__ == "__main__":
-    # Step 1: Load data from Google Sheets
     logging.info("Loading data from Google Sheets...")
     data_df = load_data_from_google_sheet()
     if data_df is None:
         logging.error("Failed to load data from Google Sheets. Exiting.")
         exit(1)
     
-    # Step 2: Split dependencies and unroll the data
     logging.info("Splitting dependencies and unrolling data...")
     processed_df = split_dependencies_and_unroll(data_df)
     
-    # Step 3: Load processed data into PostgreSQL
-    logging.info("Loading data into PostgreSQL...")
-    load_data_into_postgres(processed_df)
-    logging.info("Process completed successfully.")
+    logging.info("Generating Sankey diagram output...")
+    sankey_output = generate_sankey_output(processed_df)
+    
+    # Output the Sankey diagram data to a text file
+    with open("sankey_diagram.txt", "w") as file:
+        file.write(sankey_output)
+    
+    logging.info("Sankey diagram data has been written to sankey_diagram.txt")
