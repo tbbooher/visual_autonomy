@@ -64,7 +64,6 @@ def split_dependencies_and_unroll(df):
         df['Dependency'] = df['Dependency'].str.split(', ')
         df = df.explode('Dependency')
         
-        # df['Total Funding (m)'] = df['Total Funding (m)'].replace({r'\\\$': '', ',': ''}, regex=True)
         df['Total Funding (m)'] = df['Total Funding (m)'].replace({r'[^\d.]': ''}, regex=True)
         df['Total Funding (m)'] = pd.to_numeric(df['Total Funding (m)'], errors='coerce')        
 
@@ -80,42 +79,15 @@ def split_dependencies_and_unroll(df):
 
 def add_before_after_states(df):
     df['Before State'] = df['Program Name']
-    # Set 'After State' to dependency if it exists; otherwise, set to the same as 'Before State'
     df['After State'] = df['Dependency'].fillna(df['Before State'])
     return df
 
-def generate_sankey_output(df):
-    try:
-        output_lines = []
-
-        for _, row in df.iterrows():
-            before_state = row['Before State']
-            after_state = row['After State']
-            funding = row['Total Funding (m)']
-            org = row['Org']
-            theme = row['Theme']
-
-            # Skip rows without proper values
-            if not before_state or not after_state or pd.isna(funding):
-                continue
-
-            # Format the line for the Sankey diagram, including additional context
-            line = f"{before_state} [{int(funding)}] {after_state} // Org: {org}, Theme: {theme}"
-            output_lines.append(line)
-        
-        return "\n".join(output_lines)
-    except Exception as e:
-        logging.error(f"An error occurred while generating Sankey output: {e}")
-        return ""
-
 def create_and_populate_all_programs_table(df, engine):
     try:
-        # Drop the all_programs table to completely replace it
         with engine.connect() as conn:
             conn.execute(text("DROP TABLE IF EXISTS all_programs CASCADE"))
-            conn.commit()  # Ensure the drop command is committed
+            conn.commit()
 
-        # Create the all_programs table with Before State and After State columns
         with engine.connect() as conn:
             conn.execute(text("""
                 CREATE TABLE IF NOT EXISTS all_programs (
@@ -137,26 +109,21 @@ def create_and_populate_all_programs_table(df, engine):
                     "After State" TEXT
                 )
             """))
-            conn.commit()  # Ensure the create command is committed
+            conn.commit()
 
-        # Insert the data into the all_programs table
         df.to_sql('all_programs', engine, if_exists='append', index=False, method='multi', chunksize=1000)
         logging.info("All programs table populated successfully.")
-
-        # Output the number of rows inserted
         logging.info(f"Inserted {len(df)} rows into the all_programs table.")
     except Exception as e:
         logging.error(f"An error occurred while creating or populating all_programs table: {e}")
 
 def create_and_populate_company_tables(df, engine):
     try:
-        # Drop the tables to completely replace them
         with engine.connect() as conn:
             conn.execute(text("DROP TABLE IF EXISTS program_company"))
             conn.execute(text("DROP TABLE IF EXISTS company CASCADE"))
-            conn.commit()  # Ensure the drop commands are committed
+            conn.commit()
 
-        # Recreate the tables
         with engine.connect() as conn:
             conn.execute(text("""
                 CREATE TABLE IF NOT EXISTS company (
@@ -172,9 +139,8 @@ def create_and_populate_company_tables(df, engine):
                     FOREIGN KEY (company_id) REFERENCES company(id)
                 )
             """))
-            conn.commit()  # Ensure the create commands are committed
+            conn.commit()
 
-        # Extract and split company names
         company_names = set()
         program_company_rows = []
         for _, row in df.iterrows():
@@ -186,26 +152,78 @@ def create_and_populate_company_tables(df, engine):
                     company_names.add(company)
                     program_company_rows.append({'program_id': program_id, 'company_name': company})
 
-        # Insert unique companies into the 'company' table
         company_df = pd.DataFrame(list(company_names), columns=['name'])
         company_df.to_sql('company', engine, if_exists='append', index=False, method='multi', chunksize=1000)
         
-        # Create a mapping of company names to IDs
         with engine.connect() as conn:
             company_map = pd.read_sql('SELECT id, name FROM company', conn)
             company_map = dict(zip(company_map['name'], company_map['id']))
 
-        # Populate the 'program_company' join table
         program_company_rows = [{'program_id': row['program_id'], 'company_id': company_map[row['company_name']]} 
                                 for row in program_company_rows if row['company_name'] in company_map]
-        
-        # Remove duplicates from program_company_rows
+
         program_company_df = pd.DataFrame(program_company_rows).drop_duplicates()
         program_company_df.to_sql('program_company', engine, if_exists='append', index=False, method='multi', chunksize=1000)
         
         logging.info("Company and program_company tables populated successfully.")
     except Exception as e:
         logging.error(f"An error occurred while populating company tables: {e}")
+
+def create_and_populate_sankey_data_table(df, engine):
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("DROP TABLE IF EXISTS sankey_data"))
+            conn.commit()
+
+        with engine.connect() as conn:
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS sankey_data (
+                    "Source" TEXT,
+                    "Target" TEXT,
+                    "Level" INT,
+                    "Value" DOUBLE PRECISION,
+                    "Theme" TEXT,
+                    "Total Funding (m)" DOUBLE PRECISION,
+                    "Start Year" DATE,
+                    "End Year" DATE
+                )
+            """))
+            conn.commit()
+
+        sankey_rows = []
+        for index, row in df.iterrows():
+            source = row['Before State']
+            target = row['After State']
+            value = row['Total Funding (m)']
+            theme = row['Theme']
+            start_year = row['Start Year']
+            end_year = row['End Year']
+            level = 0
+
+            if source != target:
+                current = source
+                while current != target and current in df['Before State'].values:
+                    level += 1
+                    current = df[df['Before State'] == current]['After State'].values[0]
+            
+            sankey_rows.append({
+                'Source': source,
+                'Target': target,
+                'Level': level,
+                'Value': value,
+                'Theme': theme,
+                'Total Funding (m)': value,
+                'Start Year': start_year,
+                'End Year': end_year
+            })
+
+        sankey_df = pd.DataFrame(sankey_rows)
+
+        sankey_df.to_sql('sankey_data', engine, if_exists='append', index=False, method='multi', chunksize=1000)
+        logging.info("Sankey data table populated successfully.")
+
+    except Exception as e:
+        logging.error(f"An error occurred while creating or populating sankey_data table: {e}")
 
 if __name__ == "__main__":
     logging.info("Loading data from Google Sheets...")
@@ -217,24 +235,17 @@ if __name__ == "__main__":
     logging.info("Splitting dependencies and unrolling data...")
     processed_df = split_dependencies_and_unroll(data_df)
     
-    logging.info("Generating Sankey diagram output...")
-    sankey_output = generate_sankey_output(processed_df)
-    
-    # Output the Sankey diagram data to a text file
-    with open("sankey_diagram.txt", "w") as file:
-        file.write(sankey_output)
-    
     logging.info("Sankey diagram data has been written to sankey_diagram.txt")
     
-    # Create SQLAlchemy engine to connect to PostgreSQL
     engine = create_engine(DATABASE_URL)
     
-    # Populate all_programs table
     logging.info("Creating and populating all_programs table...")
     create_and_populate_all_programs_table(processed_df, engine)
     
-    # Populate company and program_company tables
     logging.info("Creating and populating company tables...")
     create_and_populate_company_tables(processed_df, engine)
+    
+    logging.info("Creating and populating sankey_data table...")
+    create_and_populate_sankey_data_table(processed_df, engine)
     
     logging.info("Process completed successfully.")
