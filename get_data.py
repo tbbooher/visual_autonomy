@@ -1,3 +1,5 @@
+# get_data.py
+
 import os
 import pandas as pd
 from sqlalchemy import create_engine, text
@@ -5,6 +7,7 @@ from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 from dotenv import load_dotenv
 import logging
+from data_formatter import split_dependencies_and_unroll, create_and_populate_all_programs_table, create_and_populate_company_tables
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -25,8 +28,6 @@ CURRENT_TABLE_NAME = os.getenv('CURRENT_TABLE_NAME')
 
 # PostgreSQL connection string
 DATABASE_URL = f"postgresql://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}"
-
-print(os.getcwd())  # Print current working directory
 
 def load_data_from_google_sheet():
     logging.info(f"SPREADSHEET_ID: {SPREADSHEET_ID}")
@@ -59,219 +60,117 @@ def load_data_from_google_sheet():
         logging.error(f"An error occurred while loading data from Google Sheets: {e}")
         return None
 
-def split_dependencies_and_unroll(df):
-    try:
-        df['Dependency'] = df['Dependency'].str.split(', ')
-        df = df.explode('Dependency')
-        
-        df['Total Funding (m)'] = df['Total Funding (m)'].replace({r'[^\d.]': ''}, regex=True)
-        df['Total Funding (m)'] = pd.to_numeric(df['Total Funding (m)'], errors='coerce')        
+def build_sankey_rows(program_name, current_level, df, sankey_rows, visited, id_to_name, levels_dict):
+    """Recursive function to determine levels and build source-target relationships for the Sankey diagram."""
+    program_rows = df[df['Program Name'] == program_name]
 
-        df['Start Year'] = pd.to_datetime(df['Start Year'], format='%Y', errors='coerce').dt.to_period('M').dt.to_timestamp(how='start')  # Convert to first day of the month
-        df['End Year'] = pd.to_datetime(df['End Year'], format='%Y', errors='coerce').dt.to_period('M').dt.to_timestamp(how='end')  # Convert to last day of the month
-        
-        df = add_before_after_states(df)
-        
-        return df
-    except Exception as e:
-        logging.error(f"An error occurred while processing data: {e}")
-        return df
+    if program_rows.empty or program_name in visited:
+        logging.info(f"No further dependencies for {program_name} or already visited.")
+        # Mark it as an end node by filling up to level 5
+        levels_dict[program_name] = [None] * (current_level - 1) + [program_name] + [None] * (5 - current_level)
+        sankey_rows.append({
+            'source': program_name,
+            'target': program_name,
+            'level': current_level,
+            'value': program_rows['Total Funding (m)'].sum() if not program_rows.empty else 0,
+            'theme': program_rows['Theme'].iloc[0] if not program_rows.empty else None,
+            'total_funding': program_rows['Total Funding (m)'].sum() if not program_rows.empty else 0,
+            'start_year': program_rows['Start Year'].min() if not program_rows.empty else None,
+            'end_year': program_rows['End Year'].max() if not program_rows.empty else None,
+            **{f'level_{i+1}': level_name for i, level_name in enumerate(levels_dict[program_name])}
+        })
+        return
 
-def add_before_after_states(df):
-    df['Before State'] = df['Program Name']
-    df['After State'] = df['Dependency'].fillna(df['Before State'])
-    return df
+    visited.add(program_name)
+    levels_dict[program_name] = [None] * (current_level - 1) + [program_name] + [None] * (5 - current_level)
 
-def create_and_populate_all_programs_table(df, engine):
-    try:
-        with engine.connect() as conn:
-            conn.execute(text("DROP TABLE IF EXISTS all_programs CASCADE"))
-            conn.commit()
+    for _, row in program_rows.iterrows():
+        dependencies = str(row['Dependency']).split(',') if pd.notna(row['Dependency']) else []
 
-        with engine.connect() as conn:
-            conn.execute(text("""
-                CREATE TABLE IF NOT EXISTS all_programs (
-                    "Program Name" TEXT,
-                    "Org" TEXT,
-                    "Description" TEXT,
-                    "Impact" TEXT,
-                    "Status" TEXT,
-                    "Companies" TEXT,
-                    "Total Funding (m)" DOUBLE PRECISION,
-                    "Start Year" DATE,
-                    "End Year" DATE,
-                    "ID" TEXT,
-                    "Dependency" TEXT,
-                    "Theme" TEXT,
-                    "Importance" TEXT,
-                    "Notes with Applied" TEXT,
-                    "Before State" TEXT,
-                    "After State" TEXT
-                )
-            """))
-            conn.commit()
+        if not dependencies or dependencies == ['']:
+            logging.info(f"No dependencies for {row['Program Name']}. Terminating at self.")
+            levels_dict[row['Program Name']] = levels_dict[program_name][:current_level] + [row['Program Name']] + [None] * (5 - current_level)
+            sankey_rows.append({
+                'source': row['Program Name'],
+                'target': row['Program Name'],
+                'level': current_level,
+                'value': row['Total Funding (m)'],
+                'theme': row['Theme'],
+                'total_funding': row['Total Funding (m)'],
+                'start_year': row['Start Year'],
+                'end_year': row['End Year'],
+                **{f'level_{i+1}': level_name for i, level_name in enumerate(levels_dict[row['Program Name']])}
+            })
+        else:
+            for dependency in dependencies:
+                dependency = dependency.strip()  # Clean up the dependency name
+                if dependency.isdigit():  # If dependency is an ID, convert to program name
+                    dependency_name = id_to_name.get(dependency, None)
+                    if dependency_name:
+                        levels_dict[dependency_name] = levels_dict[program_name][:current_level] + [dependency_name] + [None] * (5 - current_level - 1)
+                        sankey_rows.append({
+                            'source': dependency_name,
+                            'target': row['Program Name'],
+                            'level': current_level,
+                            'value': row['Total Funding (m)'],
+                            'theme': row['Theme'],
+                            'total_funding': row['Total Funding (m)'],
+                            'start_year': row['Start Year'],
+                            'end_year': row['End Year'],
+                            **{f'level_{i+1}': level_name for i, level_name in enumerate(levels_dict[dependency_name])}
+                        })
+                        build_sankey_rows(dependency_name, current_level + 1, df, sankey_rows, visited.copy(), id_to_name, levels_dict)
+                    else:
+                        logging.warning(f"Dependency ID '{dependency}' not found in Program Names. Skipping.")
+                else:
+                    logging.warning(f"Dependency '{dependency}' is not a valid ID. Skipping.")
 
-        df.to_sql('all_programs', engine, if_exists='append', index=False, method='multi', chunksize=1000)
-        logging.info("All programs table populated successfully.")
-        logging.info(f"Inserted {len(df)} rows into the all_programs table.")
-    except Exception as e:
-        logging.error(f"An error occurred while creating or populating all_programs table: {e}")
-
-def create_and_populate_company_tables(df, engine):
-    try:
-        with engine.connect() as conn:
-            conn.execute(text("DROP TABLE IF EXISTS program_company"))
-            conn.execute(text("DROP TABLE IF EXISTS company CASCADE"))
-            conn.commit()
-
-        with engine.connect() as conn:
-            conn.execute(text("""
-                CREATE TABLE IF NOT EXISTS company (
-                    id SERIAL PRIMARY KEY,
-                    name TEXT UNIQUE
-                )
-            """))
-            conn.execute(text("""
-                CREATE TABLE IF NOT EXISTS program_company (
-                    program_id TEXT,
-                    company_id INT,
-                    PRIMARY KEY (program_id, company_id),
-                    FOREIGN KEY (company_id) REFERENCES company(id)
-                )
-            """))
-            conn.commit()
-
-        company_names = set()
-        program_company_rows = []
-        for _, row in df.iterrows():
-            program_id = row['ID']
-            companies = row['Companies']
-            if pd.notna(companies):
-                for company in set(companies.split(', ')):
-                    company = company.strip()
-                    company_names.add(company)
-                    program_company_rows.append({'program_id': program_id, 'company_name': company})
-
-        company_df = pd.DataFrame(list(company_names), columns=['name'])
-        company_df.to_sql('company', engine, if_exists='append', index=False, method='multi', chunksize=1000)
-        
-        with engine.connect() as conn:
-            company_map = pd.read_sql('SELECT id, name FROM company', conn)
-            company_map = dict(zip(company_map['name'], company_map['id']))
-
-        program_company_rows = [{'program_id': row['program_id'], 'company_id': company_map[row['company_name']]} 
-                                for row in program_company_rows if row['company_name'] in company_map]
-
-        program_company_df = pd.DataFrame(program_company_rows).drop_duplicates()
-        program_company_df.to_sql('program_company', engine, if_exists='append', index=False, method='multi', chunksize=1000)
-        
-        logging.info("Company and program_company tables populated successfully.")
-    except Exception as e:
-        logging.error(f"An error occurred while populating company tables: {e}")
 
 def create_and_populate_sankey_data_table(df, engine):
     try:
+        # Drop the sankey_data table to completely replace it
         with engine.connect() as conn:
-            conn.execute(text("DROP TABLE IF EXISTS sankey_data"))
+            conn.execute(text("DROP TABLE IF EXISTS sankey_data CASCADE"))
             conn.commit()
 
+        # Create the sankey_data table
         with engine.connect() as conn:
             conn.execute(text("""
                 CREATE TABLE IF NOT EXISTS sankey_data (
-                    "Source" TEXT,
-                    "Target" TEXT,
-                    "Level" INT,
-                    "Value" DOUBLE PRECISION,
-                    "Theme" TEXT,
-                    "Total Funding (m)" DOUBLE PRECISION,
-                    "Start Year" DATE,
-                    "End Year" DATE
+                    source TEXT,
+                    target TEXT,
+                    level INT,
+                    value DOUBLE PRECISION,
+                    theme TEXT,
+                    total_funding DOUBLE PRECISION,
+                    start_year DATE,
+                    end_year DATE,
+                    level_1 TEXT,
+                    level_2 TEXT,
+                    level_3 TEXT,
+                    level_4 TEXT,
+                    level_5 TEXT
                 )
             """))
             conn.commit()
 
+        # Create a mapping from program IDs to program names
+        id_to_name = pd.Series(df['Program Name'].values, index=df['ID']).to_dict()
+
         sankey_rows = []
+        levels_dict = {}
 
-        # Find all unique programs to handle the dependencies correctly
-        all_programs = df['Program Name'].unique()
-        
-        # Process each program to trace its dependency chain
-        for program in all_programs:
-            level = 0
-            current_program = program
+        # Build the sankey rows starting with each unique program
+        unique_programs = df['Program Name'].unique()
+        for program in unique_programs:
+            build_sankey_rows(program, 1, df, sankey_rows, set(), id_to_name, levels_dict)
 
-            # Use a set to track visited programs to avoid infinite loops
-            visited_programs = set()
-
-            while True:
-                if current_program in visited_programs:
-                    # If we detect a loop, terminate by linking back to the program itself
-                    sankey_rows.append({
-                        'Source': current_program,
-                        'Target': current_program,
-                        'Level': level,
-                        'Value': df[df['Program Name'] == current_program]['Total Funding (m)'].sum(),
-                        'Theme': df[df['Program Name'] == current_program]['Theme'].values[0] if not df[df['Program Name'] == current_program]['Theme'].empty else None,
-                        'Total Funding (m)': df[df['Program Name'] == current_program]['Total Funding (m)'].sum(),
-                        'Start Year': df[df['Program Name'] == current_program]['Start Year'].min(),
-                        'End Year': df[df['Program Name'] == current_program]['End Year'].max()
-                    })
-                    break
-
-                visited_programs.add(current_program)
-                dependencies = df[df['Program Name'] == current_program]['Dependency'].dropna().tolist()
-                
-                if not dependencies:
-                    # If there are no dependencies, link the program to itself
-                    sankey_rows.append({
-                        'Source': current_program,
-                        'Target': current_program,
-                        'Level': level,
-                        'Value': df[df['Program Name'] == current_program]['Total Funding (m)'].sum(),
-                        'Theme': df[df['Program Name'] == current_program]['Theme'].values[0] if not df[df['Program Name'] == current_program]['Theme'].empty else None,
-                        'Total Funding (m)': df[df['Program Name'] == current_program]['Total Funding (m)'].sum(),
-                        'Start Year': df[df['Program Name'] == current_program]['Start Year'].min(),
-                        'End Year': df[df['Program Name'] == current_program]['End Year'].max()
-                    })
-                    break
-
-                next_program = None
-                for dep in dependencies:
-                    if dep != current_program:
-                        sankey_rows.append({
-                            'Source': current_program,
-                            'Target': dep,
-                            'Level': level,
-                            'Value': df[df['Program Name'] == current_program]['Total Funding (m)'].sum(),
-                            'Theme': df[df['Program Name'] == current_program]['Theme'].values[0] if not df[df['Program Name'] == current_program]['Theme'].empty else None,
-                            'Total Funding (m)': df[df['Program Name'] == current_program]['Total Funding (m)'].sum(),
-                            'Start Year': df[df['Program Name'] == current_program]['Start Year'].min(),
-                            'End Year': df[df['Program Name'] == current_program]['End Year'].max()
-                        })
-                        next_program = dep
-                        level += 1
-                        break
-
-                if not next_program or next_program == current_program:
-                    # If no new program is found or if it loops back to the current, terminate
-                    sankey_rows.append({
-                        'Source': current_program,
-                        'Target': current_program,
-                        'Level': level,
-                        'Value': df[df['Program Name'] == current_program]['Total Funding (m)'].sum(),
-                        'Theme': df[df['Program Name'] == current_program]['Theme'].values[0] if not df[df['Program Name'] == current_program]['Theme'].empty else None,
-                        'Total Funding (m)': df[df['Program Name'] == current_program]['Total Funding (m)'].sum(),
-                        'Start Year': df[df['Program Name'] == current_program]['Start Year'].min(),
-                        'End Year': df[df['Program Name'] == current_program]['End Year'].max()
-                    })
-                    break
-
-                current_program = next_program
-
+        # Create DataFrame from sankey_rows and insert into the database
         sankey_df = pd.DataFrame(sankey_rows).drop_duplicates()
+
         sankey_df.to_sql('sankey_data', engine, if_exists='append', index=False, method='multi', chunksize=1000)
-        
         logging.info("Sankey data table populated successfully.")
+
     except Exception as e:
         logging.error(f"An error occurred while creating or populating sankey_data table: {e}")
 
