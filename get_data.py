@@ -104,10 +104,27 @@ def generate_sankey_output(df):
 
 def create_and_populate_company_tables(df, engine):
     try:
-        # Truncate the tables to avoid foreign key constraint issues
+        # Drop the tables to completely replace them
         with engine.connect() as conn:
-            conn.execute(text("TRUNCATE TABLE program_company"))
-            conn.execute(text("TRUNCATE TABLE company CASCADE"))
+            conn.execute(text("DROP TABLE IF EXISTS program_company"))
+            conn.execute(text("DROP TABLE IF EXISTS company CASCADE"))
+        
+        # Recreate the tables
+        with engine.connect() as conn:
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS company (
+                    id SERIAL PRIMARY KEY,
+                    name TEXT UNIQUE
+                )
+            """))
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS program_company (
+                    program_id TEXT,
+                    company_id INT,
+                    PRIMARY KEY (program_id, company_id),
+                    FOREIGN KEY (company_id) REFERENCES company(id)
+                )
+            """))
         
         # Extract unique company names
         company_names = set()
