@@ -104,28 +104,11 @@ def generate_sankey_output(df):
 
 def create_and_populate_company_tables(df, engine):
     try:
-        # Drop the tables to completely replace them
+        # Truncate the tables to remove existing data while keeping the table structures intact
         with engine.connect() as conn:
-            conn.execute(text("DROP TABLE IF EXISTS program_company"))
-            conn.execute(text("DROP TABLE IF EXISTS company CASCADE"))
-        
-        # Recreate the tables
-        with engine.connect() as conn:
-            conn.execute(text("""
-                CREATE TABLE IF NOT EXISTS company (
-                    id SERIAL PRIMARY KEY,
-                    name TEXT UNIQUE
-                )
-            """))
-            conn.execute(text("""
-                CREATE TABLE IF NOT EXISTS program_company (
-                    program_id TEXT,
-                    company_id INT,
-                    PRIMARY KEY (program_id, company_id),
-                    FOREIGN KEY (company_id) REFERENCES company(id)
-                )
-            """))
-        
+            conn.execute(text("TRUNCATE TABLE program_company"))
+            conn.execute(text("TRUNCATE TABLE company CASCADE"))
+
         # Extract unique company names
         company_names = set()
         for companies in df['Companies']:
@@ -133,9 +116,9 @@ def create_and_populate_company_tables(df, engine):
                 for company in companies.split(', '):
                     company_names.add(company.strip())
 
-        # Insert companies into the 'company' table
+        # Insert unique companies into the 'company' table
         company_df = pd.DataFrame(list(company_names), columns=['name'])
-        company_df.to_sql('company', engine, if_exists='append', index=False)
+        company_df.to_sql('company', engine, if_exists='append', index=False, method='multi', chunksize=1000)
         
         # Create a mapping of company names to IDs
         with engine.connect() as conn:
@@ -154,7 +137,7 @@ def create_and_populate_company_tables(df, engine):
                         program_company_rows.append({'program_id': program_id, 'company_id': company_id})
 
         program_company_df = pd.DataFrame(program_company_rows)
-        program_company_df.to_sql('program_company', engine, if_exists='append', index=False)
+        program_company_df.to_sql('program_company', engine, if_exists='append', index=False, method='multi', chunksize=1000)
         
         logging.info("Company and program_company tables populated successfully.")
     except Exception as e:
