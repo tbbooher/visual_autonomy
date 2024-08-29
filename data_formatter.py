@@ -94,18 +94,21 @@ def create_and_populate_dependency_table(df, engine):
         dependency_df = dependency_df[['id', 'dependency']].drop_duplicates()
 
         # Assuming 'Dependency' column contains comma-separated dependency IDs
-        dependency_rows = []
+        dependency_rows = set()  # Using a set to store unique (program_id, dependency_id) pairs
         for _, row in dependency_df.iterrows():
             program_id = row['id']
             dependencies = row['dependency']
             for dependency_id in dependencies.split(','):
                 dependency_id = dependency_id.strip()
                 try:
-                    dependency_rows.append({'program_id': program_id, 'dependency_id': int(dependency_id.strip())})
+                    pair = (program_id, int(dependency_id))
+                    if pair not in dependency_rows:  # Check if this pair is already added
+                        dependency_rows.add(pair)
                 except ValueError:
-                    logging.warning(f"Invalid dependency ID: {dependency_id.strip()}")
+                    logging.warning(f"Invalid dependency ID: {dependency_id}")
 
-        dependency_df = pd.DataFrame(dependency_rows)
+        # Convert the set back to a DataFrame
+        dependency_df = pd.DataFrame(list(dependency_rows), columns=['program_id', 'dependency_id'])
 
         # Only insert dependencies with valid program IDs
         with engine.connect() as conn:
