@@ -17,20 +17,10 @@ def split_dependencies_and_unroll(df):
         df['Start Year'] = pd.to_datetime(df['Start Year'], format='%Y', errors='coerce').dt.to_period('M').dt.to_timestamp(how='start')  # Convert to first day of the month
         df['End Year'] = pd.to_datetime(df['End Year'], format='%Y', errors='coerce').dt.to_period('M').dt.to_timestamp(how='end')  # Convert to last day of the month
         
-        df = add_before_after_states(df)
-        
         return df
     except Exception as e:
         logging.error(f"An error occurred while processing data: {e}")
         return df
-
-def add_before_after_states(df):
-    """
-    Add 'Before State' and 'After State' columns to denote program state transitions.
-    """
-    df['Before State'] = df['Program Name']
-    df['After State'] = df['Dependency'].fillna(df['Before State'])
-    return df
 
 def create_and_populate_all_programs_table(df, engine):
     """
@@ -42,7 +32,7 @@ def create_and_populate_all_programs_table(df, engine):
             conn.execute(text("DROP TABLE IF EXISTS all_programs CASCADE"))
             conn.commit()
 
-        # Create the new table
+        # Create the new table without the 'Companies' column
         with engine.connect() as conn:
             conn.execute(text("""
                 CREATE TABLE IF NOT EXISTS all_programs (
@@ -52,15 +42,12 @@ def create_and_populate_all_programs_table(df, engine):
                     "Description" TEXT,
                     "Impact" TEXT,
                     "Status" TEXT,
-                    "Companies" TEXT,
                     "Total Funding (m)" DOUBLE PRECISION,
                     "Start Year" DATE,
                     "End Year" DATE,
                     "Theme" TEXT,
                     "Importance" TEXT,
-                    "Notes with Applied" TEXT,
-                    "Before State" TEXT,
-                    "After State" TEXT
+                    "Notes with Applied" TEXT
                 )
             """))
             conn.commit()
@@ -71,14 +58,15 @@ def create_and_populate_all_programs_table(df, engine):
         # Rename 'ID' to 'id' to match the SQL table column if needed
         unique_programs_df.rename(columns={'ID': 'id'}, inplace=True)
 
-        # Insert into the 'all_programs' table without dependencies
-        unique_programs_df.drop(columns=['Dependency'], inplace=True)
+        # Drop the 'Companies' column as it's no longer needed in this table
+        unique_programs_df.drop(columns=['Dependency', 'Companies'], inplace=True)
         unique_programs_df.to_sql('all_programs', engine, if_exists='append', index=False, method='multi', chunksize=1000)
 
         logging.info("All programs table populated successfully.")
         logging.info(f"Inserted {len(unique_programs_df)} rows into the all_programs table.")
     except Exception as e:
         logging.error(f"An error occurred while creating or populating all_programs table: {e}")
+
 
 def create_and_populate_dependency_table(df, engine):
     """
@@ -114,18 +102,12 @@ def create_and_populate_dependency_table(df, engine):
         dependency_df['program_id'] = pd.to_numeric(dependency_df['program_id'], errors='coerce').fillna(0).astype(int)
         dependency_df['dependency_id'] = pd.to_numeric(dependency_df['dependency_id'], errors='coerce').fillna(0).astype(int)
 
-        # Log the dependency DataFrame to understand its contents
-        logging.info(f"Dependency DataFrame: {dependency_df.head()}")
-
         # Ensure that only valid dependencies are inserted
         valid_ids = set(df['ID'].dropna().astype(int))
         dependency_df = dependency_df[
             dependency_df['program_id'].isin(valid_ids) & 
             dependency_df['dependency_id'].isin(valid_ids)
         ]
-
-        # Log the filtered dependency DataFrame to ensure correct filtering
-        logging.info(f"Filtered Dependency DataFrame: {dependency_df.head()}")
 
         # Insert valid dependencies into the database
         if not dependency_df.empty:
@@ -136,7 +118,6 @@ def create_and_populate_dependency_table(df, engine):
 
     except Exception as e:
         logging.error(f"An error occurred while creating or populating program_dependencies table: {e}")
-
 
 
 def create_and_populate_company_tables(df, engine):
@@ -158,9 +139,10 @@ def create_and_populate_company_tables(df, engine):
             """))
             conn.execute(text("""
                 CREATE TABLE IF NOT EXISTS program_company (
-                    program_id TEXT,
+                    program_id INT,
                     company_id INT,
                     PRIMARY KEY (program_id, company_id),
+                    FOREIGN KEY (program_id) REFERENCES all_programs(id),
                     FOREIGN KEY (company_id) REFERENCES company(id)
                 )
             """))

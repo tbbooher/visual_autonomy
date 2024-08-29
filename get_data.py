@@ -36,9 +36,7 @@ CURRENT_TABLE_NAME = os.getenv('CURRENT_TABLE_NAME')
 # PostgreSQL connection string
 DATABASE_URL = f"postgresql://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}"
 
-def load_data_from_google_sheet():
-    logging.info(f"SPREADSHEET_ID: {SPREADSHEET_ID}")
-    logging.info(f"SHEET_NAME: {SHEET_NAME}")    
+def load_data_from_google_sheet():  
     try:
         creds = Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE)
         service = build('sheets', 'v4', credentials=creds)
