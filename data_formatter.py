@@ -32,7 +32,7 @@ def create_and_populate_all_programs_table(df, engine):
             conn.execute(text("DROP TABLE IF EXISTS all_programs CASCADE"))
             conn.commit()
 
-        # Create the new table without the 'Companies' column
+        # Create the new table
         with engine.connect() as conn:
             conn.execute(text("""
                 CREATE TABLE IF NOT EXISTS all_programs (
@@ -53,20 +53,21 @@ def create_and_populate_all_programs_table(df, engine):
             conn.commit()
 
         # Ensure unique programs are inserted
-        unique_programs_df = df.drop_duplicates(subset=['ID'])
+        unique_programs_df = df.drop_duplicates(subset=['ID']).copy()  # Create a copy here to avoid SettingWithCopyWarning
 
         # Rename 'ID' to 'id' to match the SQL table column if needed
         unique_programs_df.rename(columns={'ID': 'id'}, inplace=True)
 
-        # Drop the 'Companies' column as it's no longer needed in this table
+        # Drop unnecessary columns to match the SQL table schema
         unique_programs_df.drop(columns=['Dependency', 'Companies'], inplace=True)
+
+        # Insert into the 'all_programs' table without dependencies
         unique_programs_df.to_sql('all_programs', engine, if_exists='append', index=False, method='multi', chunksize=1000)
 
         logging.info("All programs table populated successfully.")
         logging.info(f"Inserted {len(unique_programs_df)} rows into the all_programs table.")
     except Exception as e:
         logging.error(f"An error occurred while creating or populating all_programs table: {e}")
-
 
 def create_and_populate_dependency_table(df, engine):
     """
