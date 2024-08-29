@@ -8,19 +8,35 @@ def split_dependencies_and_unroll(df):
     Converts funding to numeric and date columns to the correct format.
     """
     try:
+        # Rename columns to remove spaces
+        df.rename(columns={
+            'Program Name': 'program_name',
+            'Org': 'org',
+            'Description': 'description',
+            'Impact': 'impact',
+            'Status': 'status',
+            'Total Funding (m)': 'total_funding_m',
+            'Start Year': 'start_year',
+            'End Year': 'end_year',
+            'Theme': 'theme',
+            'Importance': 'importance',
+            'Notes with Applied': 'notes_with_applied'
+        }, inplace=True)
+        
         df['Dependency'] = df['Dependency'].str.split(', ')
         df = df.explode('Dependency')
         
-        df['Total Funding (m)'] = df['Total Funding (m)'].replace({r'[^\d.]': ''}, regex=True)
-        df['Total Funding (m)'] = pd.to_numeric(df['Total Funding (m)'], errors='coerce')
+        df['total_funding_m'] = df['total_funding_m'].replace({r'[^\d.]': ''}, regex=True)
+        df['total_funding_m'] = pd.to_numeric(df['total_funding_m'], errors='coerce')
 
-        df['Start Year'] = pd.to_datetime(df['Start Year'], format='%Y', errors='coerce').dt.to_period('M').dt.to_timestamp(how='start')  # Convert to first day of the month
-        df['End Year'] = pd.to_datetime(df['End Year'], format='%Y', errors='coerce').dt.to_period('M').dt.to_timestamp(how='end')  # Convert to last day of the month
+        df['start_year'] = pd.to_datetime(df['start_year'], format='%Y', errors='coerce').dt.to_period('M').dt.to_timestamp(how='start')
+        df['end_year'] = pd.to_datetime(df['end_year'], format='%Y', errors='coerce').dt.to_period('M').dt.to_timestamp(how='end')
         
         return df
     except Exception as e:
         logging.error(f"An error occurred while processing data: {e}")
         return df
+
 
 def create_and_populate_all_programs_table(df, engine):
     """
@@ -32,31 +48,28 @@ def create_and_populate_all_programs_table(df, engine):
             conn.execute(text("DROP TABLE IF EXISTS all_programs CASCADE"))
             conn.commit()
 
-        # Create the new table
+        # Create the new table with updated column names
         with engine.connect() as conn:
             conn.execute(text("""
                 CREATE TABLE IF NOT EXISTS all_programs (
                     id SERIAL PRIMARY KEY,
-                    "Program Name" TEXT,
-                    "Org" TEXT,
-                    "Description" TEXT,
-                    "Impact" TEXT,
-                    "Status" TEXT,
-                    "Total Funding (m)" DOUBLE PRECISION,
-                    "Start Year" DATE,
-                    "End Year" DATE,
-                    "Theme" TEXT,
-                    "Importance" TEXT,
-                    "Notes with Applied" TEXT
+                    program_name TEXT,
+                    org TEXT,
+                    description TEXT,
+                    impact TEXT,
+                    status TEXT,
+                    total_funding_m DOUBLE PRECISION,
+                    start_year DATE,
+                    end_year DATE,
+                    theme TEXT,
+                    importance TEXT,
+                    notes_with_applied TEXT
                 )
             """))
             conn.commit()
 
         # Ensure unique programs are inserted
-        unique_programs_df = df.drop_duplicates(subset=['ID']).copy()  # Create a copy here to avoid SettingWithCopyWarning
-
-        # Rename 'ID' to 'id' to match the SQL table column if needed
-        unique_programs_df.rename(columns={'ID': 'id'}, inplace=True)
+        unique_programs_df = df.drop_duplicates(subset=['id']).copy()  # Create a copy here to avoid SettingWithCopyWarning
 
         # Drop unnecessary columns to match the SQL table schema
         unique_programs_df.drop(columns=['Dependency', 'Companies'], inplace=True)
@@ -68,6 +81,7 @@ def create_and_populate_all_programs_table(df, engine):
         logging.info(f"Inserted {len(unique_programs_df)} rows into the all_programs table.")
     except Exception as e:
         logging.error(f"An error occurred while creating or populating all_programs table: {e}")
+
 
 def create_and_populate_dependency_table(df, engine):
     """
