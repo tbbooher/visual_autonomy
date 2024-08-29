@@ -59,6 +59,11 @@ def load_data_from_google_sheet():
             cleaned_values.append(row)
         
         df = pd.DataFrame(cleaned_values, columns=values[0])  # Use first row as column names
+
+        # Ensure the column name is 'id' and not 'ID'
+        if 'ID' in df.columns:
+            df.rename(columns={'ID': 'id'}, inplace=True)
+        
         return df
 
     except Exception as e:
@@ -71,6 +76,8 @@ if __name__ == "__main__":
     if data_df is None:
         logging.error("Failed to load data from Google Sheets. Exiting.")
         exit(1)
+
+    logging.info(f"Loaded data: {data_df.head()}")
     
     logging.info("Splitting dependencies and unrolling data...")
     processed_df = split_dependencies_and_unroll(data_df)

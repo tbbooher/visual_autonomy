@@ -39,16 +39,13 @@ def split_dependencies_and_unroll(df):
 
 
 def create_and_populate_all_programs_table(df, engine):
-    """
-    Create and populate the 'all_programs' table in the PostgreSQL database.
-    """
     try:
-        # Drop the existing table if it exists
         with engine.connect() as conn:
+            conn.execute(text("DROP TABLE IF EXISTS program_company CASCADE"))
+            conn.execute(text("DROP TABLE IF EXISTS program_dependencies CASCADE"))
             conn.execute(text("DROP TABLE IF EXISTS all_programs CASCADE"))
             conn.commit()
 
-        # Create the new table with updated column names
         with engine.connect() as conn:
             conn.execute(text("""
                 CREATE TABLE IF NOT EXISTS all_programs (
@@ -68,25 +65,30 @@ def create_and_populate_all_programs_table(df, engine):
             """))
             conn.commit()
 
-        # Ensure unique programs are inserted
-        unique_programs_df = df.drop_duplicates(subset=['id']).copy()  # Create a copy here to avoid SettingWithCopyWarning
+        # unique_programs_df = df.drop_duplicates(subset=['id']).copy()
+        # unique_programs_df['id'] = pd.to_numeric(unique_programs_df['id'], errors='coerce')
+        # unique_programs_df.dropna(subset=['id'], inplace=True)
+        # unique_programs_df['id'] = unique_programs_df['id'].astype(int)
+        # unique_programs_df.drop(columns=['Dependency', 'Companies'], inplace=True)
 
-        # Drop unnecessary columns to match the SQL table schema
-        unique_programs_df.drop(columns=['Dependency', 'Companies'], inplace=True)
+        if not df['id'].is_unique:
+            raise ValueError("IDs are not unique.")
 
-        # Insert into the 'all_programs' table without dependencies
-        unique_programs_df.to_sql('all_programs', engine, if_exists='append', index=False, method='multi', chunksize=1000)
+        if not df['id'].apply(lambda x: isinstance(x, int)).all():
+            raise TypeError("IDs are not integers.")
 
+        df.to_sql('all_programs', engine, if_exists='append', index=False, method='multi', chunksize=1000)
         logging.info("All programs table populated successfully.")
-        logging.info(f"Inserted {len(unique_programs_df)} rows into the all_programs table.")
+        logging.info(f"Inserted {len(df)} rows into the all_programs table.")
     except Exception as e:
         logging.error(f"An error occurred while creating or populating all_programs table: {e}")
+
+
 
 
 def create_and_populate_dependency_table(df, engine):
     """
     Create and populate the 'program_dependencies' table in the PostgreSQL database.
-    This table establishes relationships between programs and their dependencies.
     """
     try:
         with engine.connect() as conn:
@@ -106,25 +108,26 @@ def create_and_populate_dependency_table(df, engine):
             """))
             conn.commit()
 
-        # Filter for rows where there is a valid dependency
         dependency_df = df[df['Dependency'].notna() & (df['Dependency'] != '')].copy()
         dependency_df = dependency_df[['ID', 'Dependency']].drop_duplicates()
 
-        # Rename columns to match the new schema
         dependency_df.columns = ['program_id', 'dependency_id']
 
-        # Convert columns to numeric, dropping non-numeric entries
-        dependency_df['program_id'] = pd.to_numeric(dependency_df['program_id'], errors='coerce').fillna(0).astype(int)
-        dependency_df['dependency_id'] = pd.to_numeric(dependency_df['dependency_id'], errors='coerce').fillna(0).astype(int)
+        dependency_df['program_id'] = pd.to_numeric(dependency_df['program_id'], errors='coerce')
+        dependency_df['dependency_id'] = pd.to_numeric(dependency_df['dependency_id'], errors='coerce')
 
-        # Ensure that only valid dependencies are inserted
-        valid_ids = set(df['ID'].dropna().astype(int))
-        dependency_df = dependency_df[
-            dependency_df['program_id'].isin(valid_ids) & 
-            dependency_df['dependency_id'].isin(valid_ids)
-        ]
+        dependency_df.dropna(subset=['program_id', 'dependency_id'], inplace=True)
+        dependency_df['program_id'] = dependency_df['program_id'].astype(int)
+        dependency_df['dependency_id'] = dependency_df['dependency_id'].astype(int)
 
-        # Insert valid dependencies into the database
+        # Only insert dependencies with valid program IDs
+        with engine.connect() as conn:
+            valid_program_ids = pd.read_sql('SELECT id FROM all_programs', conn)['id'].tolist()
+            dependency_df = dependency_df[
+                dependency_df['program_id'].isin(valid_program_ids) &
+                dependency_df['dependency_id'].isin(valid_program_ids)
+            ]
+
         if not dependency_df.empty:
             dependency_df.to_sql('program_dependencies', engine, if_exists='append', index=False, method='multi', chunksize=1000)
             logging.info("Program dependencies table populated successfully.")
