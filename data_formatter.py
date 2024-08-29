@@ -15,6 +15,7 @@ def create_and_populate_all_programs_table(df, engine):
                 CREATE TABLE IF NOT EXISTS all_programs (
                     id SERIAL PRIMARY KEY,
                     program_name TEXT,
+                    short_name TEXT,
                     org TEXT,
                     description TEXT,
                     impact TEXT,
@@ -48,6 +49,7 @@ def create_and_populate_all_programs_table(df, engine):
 
         df.rename(columns={
             'Program Name': 'program_name',
+            'Short Name': 'short_name',
             'Org': 'org',
             'Description': 'description',
             'Impact': 'impact',
