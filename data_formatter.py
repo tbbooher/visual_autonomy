@@ -109,21 +109,34 @@ def create_and_populate_dependency_table(df, engine):
 
         # Rename columns to match the new schema
         dependency_df.columns = ['program_id', 'dependency_id']
+
+        # Convert columns to numeric, dropping non-numeric entries
         dependency_df['program_id'] = pd.to_numeric(dependency_df['program_id'], errors='coerce').fillna(0).astype(int)
         dependency_df['dependency_id'] = pd.to_numeric(dependency_df['dependency_id'], errors='coerce').fillna(0).astype(int)
 
+        # Log the dependency DataFrame to understand its contents
+        logging.info(f"Dependency DataFrame: {dependency_df.head()}")
+
         # Ensure that only valid dependencies are inserted
-        valid_ids = set(df['ID'])
+        valid_ids = set(df['ID'].dropna().astype(int))
         dependency_df = dependency_df[
             dependency_df['program_id'].isin(valid_ids) & 
             dependency_df['dependency_id'].isin(valid_ids)
         ]
 
-        dependency_df.to_sql('program_dependencies', engine, if_exists='append', index=False, method='multi', chunksize=1000)
-        
-        logging.info("Program dependencies table populated successfully.")
+        # Log the filtered dependency DataFrame to ensure correct filtering
+        logging.info(f"Filtered Dependency DataFrame: {dependency_df.head()}")
+
+        # Insert valid dependencies into the database
+        if not dependency_df.empty:
+            dependency_df.to_sql('program_dependencies', engine, if_exists='append', index=False, method='multi', chunksize=1000)
+            logging.info("Program dependencies table populated successfully.")
+        else:
+            logging.warning("No valid dependencies found to populate.")
+
     except Exception as e:
         logging.error(f"An error occurred while creating or populating program_dependencies table: {e}")
+
 
 
 def create_and_populate_company_tables(df, engine):
