@@ -61,6 +61,7 @@ def load_data_into_neo4j(all_programs_df, program_dependencies_df, program_compa
             session.run("""
                 MERGE (p:Program {id: $id})
                 SET p.program_name = $program_name,
+                    p.short_name = $short_name,
                     p.org = $org,
                     p.description = $description,
                     p.impact = $impact,
