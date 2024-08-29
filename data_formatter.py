@@ -2,42 +2,6 @@ import pandas as pd
 import logging
 from sqlalchemy import text
 
-def split_dependencies_and_unroll(df):
-    """
-    Split the 'Dependency' column and unroll it into multiple rows for each dependency.
-    Converts funding to numeric and date columns to the correct format.
-    """
-    try:
-        # Rename columns to remove spaces
-        df.rename(columns={
-            'Program Name': 'program_name',
-            'Org': 'org',
-            'Description': 'description',
-            'Impact': 'impact',
-            'Status': 'status',
-            'Total Funding (m)': 'total_funding_m',
-            'Start Year': 'start_year',
-            'End Year': 'end_year',
-            'Theme': 'theme',
-            'Importance': 'importance',
-            'Notes with Applied': 'notes_with_applied'
-        }, inplace=True)
-        
-        df['Dependency'] = df['Dependency'].str.split(', ')
-        df = df.explode('Dependency')
-        
-        df['total_funding_m'] = df['total_funding_m'].replace({r'[^\d.]': ''}, regex=True)
-        df['total_funding_m'] = pd.to_numeric(df['total_funding_m'], errors='coerce')
-
-        df['start_year'] = pd.to_datetime(df['start_year'], format='%Y', errors='coerce').dt.to_period('M').dt.to_timestamp(how='start')
-        df['end_year'] = pd.to_datetime(df['end_year'], format='%Y', errors='coerce').dt.to_period('M').dt.to_timestamp(how='end')
-        
-        return df
-    except Exception as e:
-        logging.error(f"An error occurred while processing data: {e}")
-        return df
-
-
 def create_and_populate_all_programs_table(df, engine):
     try:
         with engine.connect() as conn:
@@ -55,9 +19,11 @@ def create_and_populate_all_programs_table(df, engine):
                     description TEXT,
                     impact TEXT,
                     status TEXT,
+                    companies TEXT,
                     total_funding_m DOUBLE PRECISION,
                     start_year DATE,
                     end_year DATE,
+                    dependency TEXT,
                     theme TEXT,
                     importance TEXT,
                     notes_with_applied TEXT
@@ -65,26 +31,42 @@ def create_and_populate_all_programs_table(df, engine):
             """))
             conn.commit()
 
-        # unique_programs_df = df.drop_duplicates(subset=['id']).copy()
-        # unique_programs_df['id'] = pd.to_numeric(unique_programs_df['id'], errors='coerce')
-        # unique_programs_df.dropna(subset=['id'], inplace=True)
-        # unique_programs_df['id'] = unique_programs_df['id'].astype(int)
-        # unique_programs_df.drop(columns=['Dependency', 'Companies'], inplace=True)
+        # some cleaning
+        df['Total Funding (m)'] = df['Total Funding (m)'].replace({r'[^\d.]': ''}, regex=True)
+        df['Total Funding (m)'] = pd.to_numeric(df['Total Funding (m)'], errors='coerce')
 
+        df['id'] = df['id'].astype(int)
+
+        df['Start Year'] = pd.to_datetime(df['Start Year'], format='%Y', errors='coerce').dt.to_period('M').dt.to_timestamp(how='start')
+        df['End Year'] = pd.to_datetime(df['End Year'], format='%Y', errors='coerce').dt.to_period('M').dt.to_timestamp(how='end')
+        
         if not df['id'].is_unique:
             raise ValueError("IDs are not unique.")
 
         if not df['id'].apply(lambda x: isinstance(x, int)).all():
             raise TypeError("IDs are not integers.")
 
+        df.rename(columns={
+            'Program Name': 'program_name',
+            'Org': 'org',
+            'Description': 'description',
+            'Impact': 'impact',
+            'Status': 'status',
+            'Companies': 'companies',
+            'Total Funding (m)': 'total_funding_m',
+            'Start Year': 'start_year',
+            'End Year': 'end_year',
+            'Dependency': 'dependency',
+            'Theme': 'theme',
+            'Importance': 'importance',
+            'Notes with Applied': 'notes_with_applied'
+        }, inplace=True)
+
         df.to_sql('all_programs', engine, if_exists='append', index=False, method='multi', chunksize=1000)
         logging.info("All programs table populated successfully.")
         logging.info(f"Inserted {len(df)} rows into the all_programs table.")
     except Exception as e:
         logging.error(f"An error occurred while creating or populating all_programs table: {e}")
-
-
-
 
 def create_and_populate_dependency_table(df, engine):
     """
@@ -108,17 +90,22 @@ def create_and_populate_dependency_table(df, engine):
             """))
             conn.commit()
 
-        dependency_df = df[df['Dependency'].notna() & (df['Dependency'] != '')].copy()
-        dependency_df = dependency_df[['ID', 'Dependency']].drop_duplicates()
+        dependency_df = df[df['dependency'].notna() & (df['dependency'] != '')].copy()
+        dependency_df = dependency_df[['id', 'dependency']].drop_duplicates()
 
-        dependency_df.columns = ['program_id', 'dependency_id']
+        # Assuming 'Dependency' column contains comma-separated dependency IDs
+        dependency_rows = []
+        for _, row in dependency_df.iterrows():
+            program_id = row['id']
+            dependencies = row['dependency']
+            for dependency_id in dependencies.split(','):
+                dependency_id = dependency_id.strip()
+                try:
+                    dependency_rows.append({'program_id': program_id, 'dependency_id': int(dependency_id.strip())})
+                except ValueError:
+                    logging.warning(f"Invalid dependency ID: {dependency_id.strip()}")
 
-        dependency_df['program_id'] = pd.to_numeric(dependency_df['program_id'], errors='coerce')
-        dependency_df['dependency_id'] = pd.to_numeric(dependency_df['dependency_id'], errors='coerce')
-
-        dependency_df.dropna(subset=['program_id', 'dependency_id'], inplace=True)
-        dependency_df['program_id'] = dependency_df['program_id'].astype(int)
-        dependency_df['dependency_id'] = dependency_df['dependency_id'].astype(int)
+        dependency_df = pd.DataFrame(dependency_rows)
 
         # Only insert dependencies with valid program IDs
         with engine.connect() as conn:
@@ -136,7 +123,6 @@ def create_and_populate_dependency_table(df, engine):
 
     except Exception as e:
         logging.error(f"An error occurred while creating or populating program_dependencies table: {e}")
-
 
 def create_and_populate_company_tables(df, engine):
     """
@@ -169,8 +155,8 @@ def create_and_populate_company_tables(df, engine):
         company_names = set()
         program_company_rows = []
         for _, row in df.iterrows():
-            program_id = row['ID']
-            companies = row['Companies']
+            program_id = row['id']
+            companies = row.get('companies', '')
             if pd.notna(companies):
                 for company in set(companies.split(', ')):
                     company = company.strip()

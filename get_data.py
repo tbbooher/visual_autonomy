@@ -9,7 +9,6 @@ from dotenv import load_dotenv
 import logging
 # create_and_populate_dependency_table
 from data_formatter import (
-    split_dependencies_and_unroll,
     create_and_populate_all_programs_table,
     create_and_populate_company_tables,
     create_and_populate_dependency_table,  # Import the new function
@@ -79,21 +78,18 @@ if __name__ == "__main__":
 
     logging.info(f"Loaded data: {data_df.head()}")
     
-    logging.info("Splitting dependencies and unrolling data...")
-    processed_df = split_dependencies_and_unroll(data_df)
-    
     engine = create_engine(DATABASE_URL)
     
     logging.info("Creating and populating all_programs table...")
-    create_and_populate_all_programs_table(processed_df, engine)
+    create_and_populate_all_programs_table(data_df, engine)
     
     logging.info("Creating and populating company tables...")
-    create_and_populate_company_tables(processed_df, engine)
+    create_and_populate_company_tables(data_df, engine)
     
     # logging.info("Creating and populating sankey_data table...")
-    # create_and_populate_sankey_data_table(processed_df, engine)
+    # create_and_populate_sankey_data_table(data_df, engine)
     
     logging.info("Creating and populating program_dependencies table...")
-    create_and_populate_dependency_table(processed_df, engine)
+    create_and_populate_dependency_table(data_df, engine)
     
     logging.info("Process completed successfully.")
