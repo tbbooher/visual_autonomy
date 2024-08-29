@@ -6,13 +6,13 @@ def split_dependencies_and_unroll(df):
     """
     Split the 'Dependency' column and unroll it into multiple rows for each dependency.
     Converts funding to numeric and date columns to the correct format.
-    """    
+    """
     try:
         df['Dependency'] = df['Dependency'].str.split(', ')
         df = df.explode('Dependency')
         
         df['Total Funding (m)'] = df['Total Funding (m)'].replace({r'[^\d.]': ''}, regex=True)
-        df['Total Funding (m)'] = pd.to_numeric(df['Total Funding (m)'], errors='coerce')        
+        df['Total Funding (m)'] = pd.to_numeric(df['Total Funding (m)'], errors='coerce')
 
         df['Start Year'] = pd.to_datetime(df['Start Year'], format='%Y', errors='coerce').dt.to_period('M').dt.to_timestamp(how='start')  # Convert to first day of the month
         df['End Year'] = pd.to_datetime(df['End Year'], format='%Y', errors='coerce').dt.to_period('M').dt.to_timestamp(how='end')  # Convert to last day of the month
@@ -35,16 +35,18 @@ def add_before_after_states(df):
 def create_and_populate_all_programs_table(df, engine):
     """
     Create and populate the 'all_programs' table in the PostgreSQL database.
-    """    
+    """
     try:
+        # Drop the existing table if it exists
         with engine.connect() as conn:
             conn.execute(text("DROP TABLE IF EXISTS all_programs CASCADE"))
             conn.commit()
 
+        # Create the new table
         with engine.connect() as conn:
             conn.execute(text("""
                 CREATE TABLE IF NOT EXISTS all_programs (
-                    id SERIAL PRIMARY KEY,  -- Change ID to be a primary key
+                    id SERIAL PRIMARY KEY,
                     "Program Name" TEXT,
                     "Org" TEXT,
                     "Description" TEXT,
@@ -54,7 +56,6 @@ def create_and_populate_all_programs_table(df, engine):
                     "Total Funding (m)" DOUBLE PRECISION,
                     "Start Year" DATE,
                     "End Year" DATE,
-                    "Dependency" TEXT,
                     "Theme" TEXT,
                     "Importance" TEXT,
                     "Notes with Applied" TEXT,
@@ -64,13 +65,20 @@ def create_and_populate_all_programs_table(df, engine):
             """))
             conn.commit()
 
-        df['ID'] = pd.to_numeric(df['ID'], errors='coerce').fillna(0).astype(int)  # Ensure ID is numeric and not null
-        df.to_sql('all_programs', engine, if_exists='append', index=False, method='multi', chunksize=1000)
+        # Ensure unique programs are inserted
+        unique_programs_df = df.drop_duplicates(subset=['ID'])
+
+        # Rename 'ID' to 'id' to match the SQL table column if needed
+        unique_programs_df.rename(columns={'ID': 'id'}, inplace=True)
+
+        # Insert into the 'all_programs' table without dependencies
+        unique_programs_df.drop(columns=['Dependency'], inplace=True)
+        unique_programs_df.to_sql('all_programs', engine, if_exists='append', index=False, method='multi', chunksize=1000)
+
         logging.info("All programs table populated successfully.")
-        logging.info(f"Inserted {len(df)} rows into the all_programs table.")
+        logging.info(f"Inserted {len(unique_programs_df)} rows into the all_programs table.")
     except Exception as e:
         logging.error(f"An error occurred while creating or populating all_programs table: {e}")
-
 
 def create_and_populate_dependency_table(df, engine):
     """
@@ -86,8 +94,8 @@ def create_and_populate_dependency_table(df, engine):
             conn.execute(text("""
                 CREATE TABLE IF NOT EXISTS program_dependencies (
                     id SERIAL PRIMARY KEY,
-                    program_id INT,  -- Use INT to match the 'id' column in all_programs
-                    dependency_id INT,  -- Use INT to match the 'id' column in all_programs
+                    program_id INT,
+                    dependency_id INT,
                     UNIQUE (program_id, dependency_id),
                     FOREIGN KEY (program_id) REFERENCES all_programs(id),
                     FOREIGN KEY (dependency_id) REFERENCES all_programs(id)
@@ -99,9 +107,17 @@ def create_and_populate_dependency_table(df, engine):
         dependency_df = df[df['Dependency'].notna() & (df['Dependency'] != '')].copy()
         dependency_df = dependency_df[['ID', 'Dependency']].drop_duplicates()
 
+        # Rename columns to match the new schema
         dependency_df.columns = ['program_id', 'dependency_id']
         dependency_df['program_id'] = pd.to_numeric(dependency_df['program_id'], errors='coerce').fillna(0).astype(int)
         dependency_df['dependency_id'] = pd.to_numeric(dependency_df['dependency_id'], errors='coerce').fillna(0).astype(int)
+
+        # Ensure that only valid dependencies are inserted
+        valid_ids = set(df['ID'])
+        dependency_df = dependency_df[
+            dependency_df['program_id'].isin(valid_ids) & 
+            dependency_df['dependency_id'].isin(valid_ids)
+        ]
 
         dependency_df.to_sql('program_dependencies', engine, if_exists='append', index=False, method='multi', chunksize=1000)
         
