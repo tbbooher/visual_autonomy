@@ -24,13 +24,27 @@ def get_flow_data():
     with neo4j_driver.session() as session:
         result = session.run(query)
         data = []
+        text_output = []
         for record in result:
+            source = record["program_id"]
+            target = record["dependency_id"]
+            value = record["funding"]
+            
+            # Append to list for JSON output
             data.append({
-                "source": record["program_id"],
-                "target": record["dependency_id"],
-                "value": record["funding"]
+                "source": source,
+                "target": target,
+                "value": value
             })
-    return data
+            
+            # Prepare text output
+            if target:  # Only include if there is a target
+                text_output.append(f"{source} {target} {value}")
+
+        # Display the text output
+        print("\n".join(text_output))
+        
+        return data
 
 # Get the flow data
 flow_data = get_flow_data()
