@@ -6,6 +6,10 @@ document.addEventListener('DOMContentLoaded', function() {
         // Load data from flow_data.json
         d3.json('flow_data.json').then(function(data) {
 
+            if (!data || !Array.isArray(data)) {
+                throw new Error('Invalid data format. Data should be an array of objects.');
+            }
+
             const margin = {top: 10, right: 10, bottom: 10, left: 10};
             const width = 900 - margin.left - margin.right;
             const height = 600 - margin.top - margin.bottom;
@@ -49,8 +53,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 source: nodeMap.get(d.source),
                 target: nodeMap.get(d.target),
                 value: d.value,
-                source_funding: d.source_funding,
-                target_funding: d.target_funding
+                source_funding: d.source_funding || 0,
+                target_funding: d.target_funding || 0
             }));
 
             const sankey = d3.sankey()
@@ -64,11 +68,21 @@ document.addEventListener('DOMContentLoaded', function() {
                 links: links.map(d => Object.assign({}, d))   // Ensure we pass a copy
             });
 
+            // Function to handle dragging of nodes
             const dragmove = function(event, d) {
-                d.y0 = Math.max(0, Math.min(height - (d.y1 - d.y0), event.y));
-                d.y1 = d.y0 + (d.y1 - d.y0);
-                d3.select(this).attr("transform", `translate(${d.x0},${d.y0})`);
+                // Calculate new positions
+                const newY0 = Math.max(0, Math.min(height - (d.y1 - d.y0), event.y));
+                const dy = newY0 - d.y0; // Difference in y position
+                d.y0 = newY0;
+                d.y1 += dy;
+                
+                // Update the graph with new positions
                 sankey.update(graph);
+
+                // Update the node's transform attribute
+                d3.select(this).attr("transform", `translate(${d.x0},${d.y0})`);
+                
+                // Update the links and node positions
                 updateLinksAndNodes();
             };
 
@@ -83,7 +97,10 @@ document.addEventListener('DOMContentLoaded', function() {
                     .attr("height", d => d.y1 - d.y0);
 
                 node.select(".out-bar")
-                    .attr("height", d => (d.fundingOut / (d.fundingIn || 1)) * (d.y1 - d.y0));
+                    .attr("height", d => {
+                        const height = (d.fundingOut / (d.fundingIn || 1)) * (d.y1 - d.y0);
+                        return isFinite(height) ? height : 0; // Fallback to zero if not finite
+                    });
             };
 
             const link = svg.append("g")
@@ -114,7 +131,10 @@ document.addEventListener('DOMContentLoaded', function() {
             node.append("rect")
                 .attr("class", "out-bar")
                 .attr("x", sankey.nodeWidth() / 2)
-                .attr("height", d => (d.fundingOut / (d.fundingIn || 1)) * (d.y1 - d.y0))
+                .attr("height", d => {
+                    const height = (d.fundingOut / (d.fundingIn || 1)) * (d.y1 - d.y0);
+                    return isFinite(height) ? height : 0; // Fallback to zero if not finite
+                })
                 .attr("width", sankey.nodeWidth() / 2)
                 .attr("fill", d => d3.color(color(d.name)).darker(0.5))  // Make the second bar darker
                 .attr("opacity", 0.7);
@@ -124,7 +144,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 .attr("y", d => (d.y1 - d.y0) / 2)
                 .attr("dy", "0.35em")
                 .attr("text-anchor", d => d.x0 < width / 2 ? "start" : "end")
-                .text(d => `${d.name} (${d.fundingOut})`);
+                .text(d => `${d.name} (In: $${d.fundingIn.toFixed(2)}M, Out: $${d.fundingOut.toFixed(2)}M)`);
 
             node.append("title")
                 .text(d => `${d.name}\nTotal Funding In: $${d.fundingIn.toFixed(2)}M\nTotal Funding Out: $${d.fundingOut.toFixed(2)}M`);
