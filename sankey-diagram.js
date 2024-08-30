@@ -16,6 +16,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 .append("g")
                 .attr("transform", `translate(${margin.left},${margin.top})`);
 
+            // Create a color scale for the nodes
+            const color = d3.scaleOrdinal(d3.schemeCategory10);
+
             // Create a set of all unique node names
             const nodeNames = new Set();
             data.forEach(d => {
@@ -34,8 +37,8 @@ document.addEventListener('DOMContentLoaded', function() {
             data.forEach(d => {
                 const sourceNode = nodes.find(n => n.name === d.source);
                 const targetNode = nodes.find(n => n.name === d.target);
-                sourceNode.fundingOut += d.value;
-                targetNode.fundingIn += d.value;
+                if (sourceNode) sourceNode.fundingOut += d.value;
+                if (targetNode) targetNode.fundingIn += d.value;
             });
 
             // Create a map of node names to indices
@@ -57,8 +60,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 .nodeId(d => d.index);
 
             const graph = sankey({
-                nodes: nodes,
-                links: links
+                nodes: nodes.map(d => Object.assign({}, d)),  // Ensure we pass a copy
+                links: links.map(d => Object.assign({}, d))   // Ensure we pass a copy
             });
 
             const dragmove = function(event, d) {
@@ -102,18 +105,18 @@ document.addEventListener('DOMContentLoaded', function() {
             // Create two rectangles for each node
             node.append("rect")
                 .attr("class", "in-bar")
-                .attr("x", -sankey.nodeWidth())
+                .attr("x", 0)
                 .attr("height", d => d.y1 - d.y0)
                 .attr("width", sankey.nodeWidth() / 2)
-                .attr("fill", "blue")
+                .attr("fill", d => color(d.name))
                 .attr("opacity", 0.7);
 
             node.append("rect")
                 .attr("class", "out-bar")
-                .attr("x", 0)
+                .attr("x", sankey.nodeWidth() / 2)
                 .attr("height", d => (d.fundingOut / (d.fundingIn || 1)) * (d.y1 - d.y0))
                 .attr("width", sankey.nodeWidth() / 2)
-                .attr("fill", "green")
+                .attr("fill", d => color(d.name))
                 .attr("opacity", 0.7);
 
             node.append("text")
@@ -121,7 +124,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 .attr("y", d => (d.y1 - d.y0) / 2)
                 .attr("dy", "0.35em")
                 .attr("text-anchor", d => d.x0 < width / 2 ? "start" : "end")
-                .text(d => `${d.name} (In: $${d.fundingIn.toFixed(2)}M, Out: $${d.fundingOut.toFixed(2)}M)`);
+                .text(d => `${d.name} (${(d.fundingOut || 0)})`);
 
             node.append("title")
                 .text(d => `${d.name}\nTotal Funding In: $${d.fundingIn.toFixed(2)}M\nTotal Funding Out: $${d.fundingOut.toFixed(2)}M`);
