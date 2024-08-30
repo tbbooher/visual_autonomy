@@ -1,57 +1,70 @@
-import json
-from neo4j import GraphDatabase
-from dotenv import load_dotenv
 import os
+import pandas as pd
+from sqlalchemy import create_engine
+from dotenv import load_dotenv
+import json
 
 # Load environment variables from .env file
 load_dotenv()
 
-# Get Neo4j credentials from environment variables
-neo4j_user = os.getenv("NEO4J_USER")
-neo4j_password = os.getenv("NEO4J_PASSWORD")
+# PostgreSQL connection settings
+POSTGRES_USER = os.getenv('DATABASE_USER')
+POSTGRES_PASSWORD = os.getenv('DATABASE_PASSWORD')
+POSTGRES_DB = os.getenv('CURRENT_DB_NAME')
+POSTGRES_HOST = os.getenv('DATABASE_HOST')
+POSTGRES_PORT = os.getenv('LOCAL_DATABASE_PORT')
 
-# Initialize the Neo4j driver with credentials from the environment
-neo4j_driver = GraphDatabase.driver("bolt://localhost:7687", auth=(neo4j_user, neo4j_password))
+# PostgreSQL connection string
+DATABASE_URL = f"postgresql://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}"
 
-# Function to get flow data
-def get_flow_data():
-    query = """
-    MATCH (p:Program)
-    OPTIONAL MATCH (p)-[r:DEPENDS_ON]->(p2:Program)
-    RETURN p.id AS program_id, p2.id AS dependency_id, p.total_funding_m AS funding
+# Initialize PostgreSQL connection
+engine = create_engine(DATABASE_URL)
+
+def extract_and_process_data():
     """
+    Extract data from PostgreSQL, process it, and prepare for Sankey diagram.
+    """
+    # Extract all programs and dependencies data
+    all_programs_df = pd.read_sql("SELECT * FROM all_programs", engine)
+    program_dependencies_df = pd.read_sql("SELECT * FROM program_dependencies", engine)
     
-    with neo4j_driver.session() as session:
-        result = session.run(query)
-        data = []
-        text_output = []
-        for record in result:
-            source = record["program_id"]
-            target = record["dependency_id"]
-            value = record["funding"]
-            
-            # Append to list for JSON output
-            data.append({
-                "source": source,
-                "target": target,
-                "value": value
-            })
-            
-            # Prepare text output
-            if target:  # Only include if there is a target
-                text_output.append(f"{source} {target} {value}")
-
-        # Display the text output
-        print("\n".join(text_output))
+    # Merge programs with their dependencies
+    merged_df = pd.merge(all_programs_df, program_dependencies_df, left_on='id', right_on='program_id', how='left')
+    merged_df = pd.merge(merged_df, all_programs_df[['id', 'short_name']], left_on='dependency_id', right_on='id', how='left', suffixes=('', '_source'))
+    
+    # Initialize data structures for output
+    data = []
+    text_output = []
+    
+    # Process each program to build the relationship and funding flow
+    for _, row in merged_df.iterrows():
+        source = row['short_name_source'] if pd.notna(row['short_name_source']) else None
+        target = row['short_name']
+        value = row['total_funding_m']
+        theme = row['theme']
         
-        return data
+        # Append to list for JSON output
+        data.append({
+            "source": source,
+            "target": target,
+            "value": value,
+            "theme": theme
+        })
+        
+        # Prepare text output
+        if source:
+            text_output.append(f"{target} [{value}] {theme}")
+        else:
+            text_output.append(f"{target} [{value}] {theme}")
 
-# Get the flow data
-flow_data = get_flow_data()
+    # Display the text output
+    print("\n".join(text_output))
+    
+    return data
+
+# Get the processed data
+sankey_data = extract_and_process_data()
 
 # Save the data to a JSON file for D3.js consumption
 with open('flow_data.json', 'w') as f:
-    json.dump(flow_data, f)
-
-# Close the Neo4j driver
-neo4j_driver.close()
+    json.dump(sankey_data, f, indent=4)  # Pretty print JSON for better readability
