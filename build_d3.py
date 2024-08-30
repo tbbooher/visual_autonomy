@@ -22,71 +22,58 @@ engine = create_engine(DATABASE_URL)
 
 def extract_and_process_data():
     """
-    Extract data from PostgreSQL, process it, and prepare for Sankey diagram.
+    Extract data from PostgreSQL using a direct SQL query, process it, and prepare for Sankey diagram.
     """
-    # Extract all programs and dependencies data
-    all_programs_df = pd.read_sql("SELECT * FROM all_programs WHERE theme = 'Combat Autonomy'", engine)
-    program_dependencies_df = pd.read_sql("SELECT * FROM program_dependencies", engine)
+    # SQL query to extract source, target, source funding, target funding, value, and theme
+    query = """
+            SELECT 
+                source_program.short_name AS source,
+                target_program.short_name AS target,
+                source_program.total_funding_m AS source_funding,
+                target_program.total_funding_m AS target_funding,
+                COALESCE(source_program.total_funding_m, target_program.total_funding_m) AS value,
+                target_program.theme AS theme
+            FROM 
+                program_dependencies
+            JOIN 
+                all_programs AS source_program ON program_dependencies.dependency_id = source_program.id
+            JOIN 
+                all_programs AS target_program ON program_dependencies.program_id = target_program.id
+            WHERE 
+                target_program.theme = 'Combat Autonomy';
+    """
     
-    # Create a DataFrame to store source-target relationships
-    dependency_df = pd.merge(
-        program_dependencies_df,
-        all_programs_df[['id', 'short_name', 'total_funding_m']],
-        left_on='dependency_id',
-        right_on='id',
-        suffixes=('', '_source')
-    )
-    
-    dependency_df = pd.merge(
-        dependency_df,
-        all_programs_df[['id', 'short_name', 'total_funding_m']],
-        left_on='program_id',
-        right_on='id',
-        suffixes=('_target', '_source')
-    )
-    
+    # Execute the SQL query
+    df = pd.read_sql(query, engine)
+
     # Initialize data structures for output
     data = []
     text_output = []
-
-    # Add entries for programs with dependencies
-    for _, row in dependency_df.iterrows():
-        source = row['short_name_source']
-        target = row['short_name_target']
-        value = row['total_funding_m_source']
-        theme = 'Combat Autonomy'
-        
-        # Append to list for JSON output
-        data.append({
-            "source": source,
-            "target": target,
-            "value": value,
-            "theme": theme
-        })
-        
-        # Prepare text output
-        text_output.append(f"{source} [{value}] {theme}")
-
-    # Identify and add entries for programs without dependencies
-    all_target_ids = set(dependency_df['program_id'])
-    independent_programs = all_programs_df[~all_programs_df['id'].isin(all_target_ids)]
-
-    for _, row in independent_programs.iterrows():
-        source = None
-        target = row['short_name']
-        value = row['total_funding_m']
+    
+    # Process each row to build the relationship and funding flow
+    for _, row in df.iterrows():
+        source = row['source']
+        target = row['target']
+        source_funding = row['source_funding']
+        target_funding = row['target_funding']
+        value = row['value']
         theme = row['theme']
         
         # Append to list for JSON output
         data.append({
             "source": source,
             "target": target,
+            "source_funding": source_funding,
+            "target_funding": target_funding,
             "value": value,
             "theme": theme
         })
         
-        # Prepare text output
-        text_output.append(f"{target} [{value}] {theme}")
+        # Prepare text output correctly
+        if source:
+            text_output.append(f"{source} (Source Funding: {source_funding}) -> {target} (Target Funding: {target_funding}) [{value}] {theme}")
+        else:
+            text_output.append(f"{target} [{value}] {theme}")
 
     # Display the text output
     print("\n".join(text_output))
