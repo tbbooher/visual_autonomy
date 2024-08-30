@@ -61,36 +61,27 @@ document.addEventListener('DOMContentLoaded', function() {
                 links: links
             });
 
-            // Color scale for nodes
-            const color = d3.scaleOrdinal(d3.schemeCategory10);
-
-            // Function to update the diagram
-            function updateDiagram() {
+            const dragmove = function(event, d) {
+                d.y0 = Math.max(0, Math.min(height - (d.y1 - d.y0), event.y));
+                d.y1 = d.y0 + (d.y1 - d.y0);
+                d3.select(this).attr("transform", `translate(${d.x0},${d.y0})`);
                 sankey.update(graph);
-                link.attr("d", d3.sankeyLinkHorizontal());
-                node.attr("transform", d => `translate(${d.x0},${d.y0})`);
-                nodeRect.attr("height", d => d.y1 - d.y0);
-                nodeOutRect.attr("height", d => (d.fundingOut / (d.value || 1)) * (d.y1 - d.y0));
-                nodeText.attr("y", d => (d.y1 - d.y0) / 2);
-            }
+                updateLinksAndNodes();
+            };
 
-            // Drag behavior
-            const drag = d3.drag()
-                .subject(function(event, d) {
-                    return d;
-                })
-                .on("start", function(event, d) {
-                    d3.select(this).raise().attr("cursor", "grabbing");
-                })
-                .on("drag", function(event, d) {
-                    const dy = event.dy;
-                    d.y0 = Math.max(0, Math.min(height - (d.y1 - d.y0), d.y0 + dy));
-                    d.y1 = d.y0 + (d.y1 - d.y0);
-                    updateDiagram();
-                })
-                .on("end", function(event, d) {
-                    d3.select(this).attr("cursor", "grab");
-                });
+            // Update function to redraw links and nodes
+            const updateLinksAndNodes = function() {
+                link.attr("d", d3.sankeyLinkHorizontal())
+                    .style("stroke-width", d => Math.max(1, d.width));
+
+                node.attr("transform", d => `translate(${d.x0},${d.y0})`);
+
+                node.select(".in-bar")
+                    .attr("height", d => d.y1 - d.y0);
+
+                node.select(".out-bar")
+                    .attr("height", d => (d.fundingOut / (d.fundingIn || 1)) * (d.y1 - d.y0));
+            };
 
             const link = svg.append("g")
                 .selectAll(".link")
@@ -98,10 +89,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 .enter().append("path")
                 .attr("class", "link")
                 .attr("d", d3.sankeyLinkHorizontal())
-                .attr("stroke-width", d => Math.max(1, d.width))
-                .attr("stroke", d => color(d.source.name))
-                .attr("stroke-opacity", 0.5)
-                .attr("fill", "none");
+                .style("stroke-width", d => Math.max(1, d.width));
 
             const node = svg.append("g")
                 .selectAll(".node")
@@ -109,29 +97,31 @@ document.addEventListener('DOMContentLoaded', function() {
                 .enter().append("g")
                 .attr("class", "node")
                 .attr("transform", d => `translate(${d.x0},${d.y0})`)
-                .attr("cursor", "grab")
-                .call(drag);
+                .call(d3.drag().on("drag", dragmove));
 
             // Create two rectangles for each node
-            const nodeRect = node.append("rect")
+            node.append("rect")
+                .attr("class", "in-bar")
                 .attr("x", -sankey.nodeWidth())
-                .attr("width", sankey.nodeWidth())
-                .attr("fill", d => color(d.name))
-                .attr("opacity", 0.8);
-
-            const nodeOutRect = node.append("rect")
-                .attr("x", -sankey.nodeWidth() / 2)
+                .attr("height", d => d.y1 - d.y0)
                 .attr("width", sankey.nodeWidth() / 2)
-                .attr("fill", d => d3.color(color(d.name)).brighter(0.5))
-                .attr("opacity", 0.8);
+                .attr("fill", "blue")
+                .attr("opacity", 0.7);
 
-            const nodeText = node.append("text")
-                .attr("x", d => d.x0 < width / 2 ? 6 : -6)
+            node.append("rect")
+                .attr("class", "out-bar")
+                .attr("x", 0)
+                .attr("height", d => (d.fundingOut / (d.fundingIn || 1)) * (d.y1 - d.y0))
+                .attr("width", sankey.nodeWidth() / 2)
+                .attr("fill", "green")
+                .attr("opacity", 0.7);
+
+            node.append("text")
+                .attr("x", d => d.x0 < width / 2 ? 6 + sankey.nodeWidth() : -6)
+                .attr("y", d => (d.y1 - d.y0) / 2)
                 .attr("dy", "0.35em")
                 .attr("text-anchor", d => d.x0 < width / 2 ? "start" : "end")
-                .text(d => `${d.name} (In: $${d.fundingIn.toFixed(2)}M, Out: $${d.fundingOut.toFixed(2)}M)`)
-                .attr("fill", "black")
-                .attr("font-size", "10px");
+                .text(d => `${d.name} (In: $${d.fundingIn.toFixed(2)}M, Out: $${d.fundingOut.toFixed(2)}M)`);
 
             node.append("title")
                 .text(d => `${d.name}\nTotal Funding In: $${d.fundingIn.toFixed(2)}M\nTotal Funding Out: $${d.fundingOut.toFixed(2)}M`);
