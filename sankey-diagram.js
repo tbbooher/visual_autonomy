@@ -116,7 +116,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 .attr("x", sankey.nodeWidth() / 2)
                 .attr("height", d => (d.fundingOut / (d.fundingIn || 1)) * (d.y1 - d.y0))
                 .attr("width", sankey.nodeWidth() / 2)
-                .attr("fill", d => color(d.name))
+                .attr("fill", d => d3.color(color(d.name)).darker(0.5))  // Make the second bar darker
                 .attr("opacity", 0.7);
 
             node.append("text")
@@ -124,7 +124,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 .attr("y", d => (d.y1 - d.y0) / 2)
                 .attr("dy", "0.35em")
                 .attr("text-anchor", d => d.x0 < width / 2 ? "start" : "end")
-                .text(d => `${d.name} (${(d.fundingOut || 0)})`);
+                .text(d => `${d.name} (${d.fundingOut})`);
 
             node.append("title")
                 .text(d => `${d.name}\nTotal Funding In: $${d.fundingIn.toFixed(2)}M\nTotal Funding Out: $${d.fundingOut.toFixed(2)}M`);
