@@ -45,7 +45,8 @@ document.addEventListener("DOMContentLoaded", function () {
                 const nodes = Array.from(nodeNames).map((name) => ({
                     name: name,
                     fundingIn: 0,
-                    fundingOut: 0
+                    fundingOut: 0,
+                    targetFunding: 0 // Add targetFunding to handle final node case
                 }));
 
                 // Calculate total funding for each node
@@ -53,7 +54,10 @@ document.addEventListener("DOMContentLoaded", function () {
                     const sourceNode = nodes.find((n) => n.name === d.source);
                     const targetNode = nodes.find((n) => n.name === d.target);
                     if (sourceNode) sourceNode.fundingOut += d.value;
-                    if (targetNode) targetNode.fundingIn += d.value;
+                    if (targetNode) {
+                        targetNode.fundingIn += d.value;
+                        targetNode.targetFunding = d.target_funding; // Assign targetFunding for final node
+                    }
                 });
 
                 // Create a map of node names to indices
@@ -124,16 +128,21 @@ document.addEventListener("DOMContentLoaded", function () {
                     .attr("fill", (d) => color(d.name))
                     .attr("opacity", 0.7);
 
-                // Create the out-bar with adjusted height
+                // Create the out-bar or target-funding bar for final nodes
                 node.append("rect")
                     .attr("class", "out-bar")
                     .attr("x", sankey.nodeWidth() / 2)
                     .attr("height", (d) => {
                         const baseHeight = d.y1 - d.y0;
-                        if (d.fundingOut > d.fundingIn) {
+                        const isFinalNode = graph.links.every(link => link.source.index !== d.index);
+                        if (isFinalNode) {
+                            // return (d.fundingOut / d.fundingIn) * baseHeight;
+                            return baseHeight*2;
+                        } else if (d.fundingOut > d.fundingIn) {
                             return baseHeight;
+                        } else {
+                            return (d.fundingOut / d.fundingIn) * baseHeight;
                         }
-                        return (d.fundingOut / d.fundingIn) * baseHeight;
                     })
                     .attr("width", sankey.nodeWidth() / 2)
                     .attr("fill", (d) => d3.color(color(d.name)).darker(0.5))
@@ -146,13 +155,15 @@ document.addEventListener("DOMContentLoaded", function () {
                     .attr("text-anchor", (d) => (d.x0 < width / 2 ? "start" : "end"))
                     .text((d) => {
                         const isFinalNode = graph.links.every(link => link.source.index !== d.index);
-                        return isFinalNode
-                            ? `${d.name} (${d.fundingIn})`
-                            : `${d.name} (${d.fundingOut})`;
+                        if (isFinalNode) {
+                            return `${d.name} (${d.targ})`;
+                        } else {
+                            return `${d.name} (${d.fundingOut})`;
+                        }
                     });
 
                 node.append("title")
-                    .text(d => `${d.name}\nTotal Funding In: $${d.fundingIn.toFixed(2)}M\nTotal Funding Out: $${d.fundingOut.toFixed(2)}M`);
+                    .text(d => `${d.name}\nTotal Funding In: $${d.fundingIn.toFixed(2)}M\nTotal Funding Out: $${d.fundingOut.toFixed(2)}M\nTarget Funding: $${d.targetFunding.toFixed(2)}M`);
 
                 link.append("title")
                     .text(d => `${d.source.name} → ${d.target.name}\nValue: $${d.value.toFixed(2)}M\nSource Funding: $${d.source_funding.toFixed(2)}M\nTarget Funding: $${d.target_funding.toFixed(2)}M`);
