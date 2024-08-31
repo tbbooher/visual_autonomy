@@ -24,7 +24,7 @@ def extract_and_process_data():
     """
     Extract data from PostgreSQL using a direct SQL query, process it, and prepare for Sankey diagram.
     """
-    # SQL query to extract source, target, source funding, target funding, value, and theme
+    # SQL query to extract source, target, source funding, target funding, value, and themes
     query = """
             SELECT 
                 source_program.short_name AS source,
@@ -32,15 +32,14 @@ def extract_and_process_data():
                 source_program.total_funding_m AS source_funding,
                 target_program.total_funding_m AS target_funding,
                 COALESCE(source_program.total_funding_m, target_program.total_funding_m) AS value,
-                target_program.theme AS theme
+                source_program.theme AS source_theme,
+                target_program.theme AS target_theme
             FROM 
                 program_dependencies
             JOIN 
                 all_programs AS source_program ON program_dependencies.dependency_id = source_program.id
             JOIN 
-                all_programs AS target_program ON program_dependencies.program_id = target_program.id
-            WHERE 
-                target_program.theme = 'Combat Autonomy';
+                all_programs AS target_program ON program_dependencies.program_id = target_program.id;
     """
     
     # Execute the SQL query
@@ -57,7 +56,8 @@ def extract_and_process_data():
         source_funding = row['source_funding']
         target_funding = row['target_funding']
         value = row['value']
-        theme = row['theme']
+        source_theme = row['source_theme']
+        target_theme = row['target_theme']
         
         # Append to list for JSON output
         data.append({
@@ -66,14 +66,15 @@ def extract_and_process_data():
             "source_funding": source_funding,
             "target_funding": target_funding,
             "value": value,
-            "theme": theme
+            "source_theme": source_theme,
+            "target_theme": target_theme
         })
         
         # Prepare text output correctly
         if source:
-            text_output.append(f"{source} (Source Funding: {source_funding}) -> {target} (Target Funding: {target_funding}) [{value}] {theme}")
+            text_output.append(f"{source} (Source Funding: {source_funding}) -> {target} (Target Funding: {target_funding}) [{value}] Source Theme: {source_theme}, Target Theme: {target_theme}")
         else:
-            text_output.append(f"{target} [{value}] {theme}")
+            text_output.append(f"{target} [{value}] Source Theme: {source_theme}, Target Theme: {target_theme}")
 
     # Display the text output
     print("\n".join(text_output))
