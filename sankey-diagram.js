@@ -65,8 +65,8 @@ document.addEventListener('DOMContentLoaded', function () {
                 .nodeId(d => d.index);
 
             const graph = sankey({
-                nodes: nodes.map(d => Object.assign({}, d)),
-                links: links.map(d => Object.assign({}, d))
+                nodes: nodes.map(d => Object.assign({}, d)),  // Ensure we pass a copy
+                links: links.map(d => Object.assign({}, d))   // Ensure we pass a copy
             });
 
             const link = svg.append("g")
@@ -88,26 +88,38 @@ document.addEventListener('DOMContentLoaded', function () {
             node.append("rect")
                 .attr("class", "in-bar")
                 .attr("x", 0)
-                .attr("y", 0)
                 .attr("height", d => d.y1 - d.y0)
-                .attr("width", sankey.nodeWidth())
+                .attr("width", sankey.nodeWidth() / 2)
                 .attr("fill", d => color(d.name))
                 .attr("opacity", 0.7);
 
             node.append("rect")
                 .attr("class", "out-bar")
-                .attr("x", 0)
-                .attr("y", 0)
+                .attr("x", d => {
+                    if (d.fundingIn === 0) {
+                        console.log('Adjusting outgoing bar position for start node!!!:', d.name);
+                        return -100; // Move the bar to the start of the flow for start nodes
+                    }
+                    return sankey.nodeWidth() / 2;
+                })
                 .attr("height", d => {
-                    const height = (d.fundingOut / (d.value || 1)) * (d.y1 - d.y0);
-                    return isFinite(height) ? height : 0;
+                    if (d.fundingIn === 0) {
+                        console.log('Skipping outgoing bar for node:', d.name);
+
+                        return 0; // Do not render the outgoing bar for start nodes
+                    } else {
+                        console.log('Funding Data:', d.fundingIn);
+                    }
+
+                    const height = (d.fundingOut / (d.fundingIn || 1)) * (d.y1 - d.y0);
+                    return isFinite(height) ? height : 0; // Fallback to zero if not finite
                 })
                 .attr("width", sankey.nodeWidth() / 2)
-                .attr("fill", d => d3.color(color(d.name)).darker(0.5))
+                .attr("fill", d => d3.color(color(d.name)).darker(0.5))  // Make the second bar darker
                 .attr("opacity", 0.7);
 
             node.append("text")
-                .attr("x", d => d.x0 < width / 2 ? sankey.nodeWidth() + 6 : -6)
+                .attr("x", d => d.x0 < width / 2 ? 6 + sankey.nodeWidth() : -6)
                 .attr("y", d => (d.y1 - d.y0) / 2)
                 .attr("dy", "0.35em")
                 .attr("text-anchor", d => d.x0 < width / 2 ? "start" : "end")
