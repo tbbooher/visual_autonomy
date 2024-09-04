@@ -136,8 +136,7 @@ document.addEventListener("DOMContentLoaded", function () {
                         const baseHeight = d.y1 - d.y0;
                         const isFinalNode = graph.links.every(link => link.source.index !== d.index);
                         if (isFinalNode) {
-                            // return (d.fundingOut / d.fundingIn) * baseHeight;
-                            return baseHeight*2;
+                            return (d.targetFunding / d.fundingIn)* baseHeight;
                         } else if (d.fundingOut > d.fundingIn) {
                             return baseHeight;
                         } else {
@@ -156,7 +155,7 @@ document.addEventListener("DOMContentLoaded", function () {
                     .text((d) => {
                         const isFinalNode = graph.links.every(link => link.source.index !== d.index);
                         if (isFinalNode) {
-                            return `${d.name} (${d.targ})`;
+                            return `${d.name} (${d.targetFunding})`;
                         } else {
                             return `${d.name} (${d.fundingOut})`;
                         }

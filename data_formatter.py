@@ -32,6 +32,17 @@ def create_and_populate_all_programs_table(df, engine):
             """))
             conn.commit()
 
+        # Debugging: Log rows with potential issues
+        if df['id'].isnull().any():
+            logging.error("Some rows have null IDs, which may cause issues.")
+            logging.error(f"Problematic rows: {df[df['id'].isnull()]}")
+        
+        if not df['id'].apply(lambda x: str(x).isdigit()).all():
+            logging.error("Some rows have non-integer IDs.")
+            logging.error(f"Problematic rows: {df[~df['id'].apply(lambda x: str(x).isdigit())]}")
+        
+        df['id'] = pd.to_numeric(df['id'], errors='coerce')
+
         # some cleaning
         df['Total Funding (m)'] = df['Total Funding (m)'].replace({r'[^\d.]': ''}, regex=True)
         df['Total Funding (m)'] = pd.to_numeric(df['Total Funding (m)'], errors='coerce')

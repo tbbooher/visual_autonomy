@@ -13,7 +13,6 @@ from data_formatter import (
     create_and_populate_company_tables,
     create_and_populate_dependency_table,  # Import the new function
 )
-from process_sankey import create_and_populate_sankey_data_table
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -75,8 +74,6 @@ if __name__ == "__main__":
     if data_df is None:
         logging.error("Failed to load data from Google Sheets. Exiting.")
         exit(1)
-
-    logging.info(f"Loaded data: {data_df.head()}")
     
     engine = create_engine(DATABASE_URL)
     
@@ -85,9 +82,6 @@ if __name__ == "__main__":
     
     logging.info("Creating and populating company tables...")
     create_and_populate_company_tables(data_df, engine)
-    
-    # logging.info("Creating and populating sankey_data table...")
-    # create_and_populate_sankey_data_table(data_df, engine)
     
     logging.info("Creating and populating program_dependencies table...")
     create_and_populate_dependency_table(data_df, engine)
