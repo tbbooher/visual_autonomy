@@ -10,7 +10,7 @@ def create_and_populate_all_programs_table(df, engine):
             conn.execute(text("DROP TABLE IF EXISTS all_programs CASCADE"))
             conn.commit()
 
-        with engine.connect() as conn:
+            # Create the all_programs table
             conn.execute(text("""
                 CREATE TABLE IF NOT EXISTS all_programs (
                     id SERIAL PRIMARY KEY,
@@ -32,32 +32,37 @@ def create_and_populate_all_programs_table(df, engine):
             """))
             conn.commit()
 
-        # Debugging: Log rows with potential issues
-        if df['id'].isnull().any():
-            logging.error("Some rows have null IDs, which may cause issues.")
-            logging.error(f"Problematic rows: {df[df['id'].isnull()]}")
-        
-        if not df['id'].apply(lambda x: str(x).isdigit()).all():
-            logging.error("Some rows have non-integer IDs.")
-            logging.error(f"Problematic rows: {df[~df['id'].apply(lambda x: str(x).isdigit())]}")
-        
-        df['id'] = pd.to_numeric(df['id'], errors='coerce')
+        # Remove completely empty rows
+        df = df.dropna(how='all')
 
-        # some cleaning
+        # Ensure column names are consistent and strip whitespace
+        df.columns = df.columns.str.strip()
+
+        # Validate IDs
+        df['id'] = pd.to_numeric(df['id'], errors='coerce')
+        if df['id'].isnull().any():
+            logging.error(f"Rows with null IDs: {df[df['id'].isnull()]}")
+            raise ValueError("Some rows have null IDs")
+
+        # Check for duplicates
+        duplicates = df[df.duplicated(subset='id', keep=False)]
+        if not duplicates.empty:
+            logging.error(f"Duplicate IDs found: {duplicates['id'].tolist()}")
+            raise ValueError(f"Duplicate IDs detected: {duplicates['id'].tolist()}")
+
+        # Clean and validate the 'Total Funding (m)' column
         df['Total Funding (m)'] = df['Total Funding (m)'].replace({r'[^\d.]': ''}, regex=True)
         df['Total Funding (m)'] = pd.to_numeric(df['Total Funding (m)'], errors='coerce')
 
-        df['id'] = df['id'].astype(int)
+        invalid_funding = df[df['Total Funding (m)'].isnull() | (df['Total Funding (m)'] == '')]
+        if not invalid_funding.empty:
+            logging.warning(f"Invalid or missing 'Total Funding (m)' in rows: {invalid_funding[['id', 'Total Funding (m)']].to_dict(orient='records')}")
 
+        # Format date columns
         df['Start Year'] = pd.to_datetime(df['Start Year'], format='%Y', errors='coerce').dt.to_period('M').dt.to_timestamp(how='start')
         df['End Year'] = pd.to_datetime(df['End Year'], format='%Y', errors='coerce').dt.to_period('M').dt.to_timestamp(how='end')
-        
-        if not df['id'].is_unique:
-            raise ValueError("IDs are not unique.")
 
-        if not df['id'].apply(lambda x: isinstance(x, int)).all():
-            raise TypeError("IDs are not integers.")
-
+        # Rename columns to match the database schema
         df.rename(columns={
             'Program Name': 'program_name',
             'Short Name': 'short_name',
@@ -75,11 +80,14 @@ def create_and_populate_all_programs_table(df, engine):
             'Notes with Applied': 'notes_with_applied'
         }, inplace=True)
 
+        # Insert into all_programs table
         df.to_sql('all_programs', engine, if_exists='append', index=False, method='multi', chunksize=1000)
-        logging.info("All programs table populated successfully.")
         logging.info(f"Inserted {len(df)} rows into the all_programs table.")
+
     except Exception as e:
         logging.error(f"An error occurred while creating or populating all_programs table: {e}")
+        raise e
+
 
 def create_and_populate_dependency_table(df, engine):
     """
@@ -141,6 +149,137 @@ def create_and_populate_dependency_table(df, engine):
         logging.error(f"An error occurred while creating or populating program_dependencies table: {e}")
 
 def create_and_populate_company_tables(df, engine):
+    try:
+        # Drop existing tables
+        with engine.connect() as conn:
+            conn.execute(text("DROP TABLE IF EXISTS program_company"))
+            conn.execute(text("DROP TABLE IF EXISTS company CASCADE"))
+            conn.commit()
+
+        # Create tables
+        with engine.connect() as conn:
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS company (
+                    id SERIAL PRIMARY KEY,
+                    name TEXT UNIQUE
+                )
+            """))
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS program_company (
+                    program_id INT,
+                    company_id INT,
+                    PRIMARY KEY (program_id, company_id),
+                    FOREIGN KEY (program_id) REFERENCES all_programs(id),
+                    FOREIGN KEY (company_id) REFERENCES company(id)
+                )
+            """))
+            conn.commit()
+
+        company_names = set()
+        program_company_rows = []
+        for _, row in df.iterrows():
+            program_id = row['id']
+            companies = row.get('companies', '')
+            if pd.notna(companies):
+                for company in set(companies.split(', ')):
+                    company = company.strip()
+                    company_names.add(company)
+                    program_company_rows.append({'program_id': program_id, 'company_name': company})
+
+        company_df = pd.DataFrame(list(company_names), columns=['name'])
+        company_df.to_sql('company', engine, if_exists='append', index=False, method='multi', chunksize=1000)
+
+        # Validate program IDs
+        with engine.connect() as conn:
+            valid_program_ids = pd.read_sql('SELECT id FROM all_programs', conn)['id'].tolist()
+
+        # Filter out invalid program IDs
+        program_company_rows = [row for row in program_company_rows if row['program_id'] in valid_program_ids]
+
+        if not program_company_rows:
+            logging.error("No valid program-company associations found to insert.")
+            return
+
+        # Insert valid data
+        program_company_df = pd.DataFrame(program_company_rows).drop_duplicates()
+        program_company_df.to_sql('program_company', engine, if_exists='append', index=False, method='multi', chunksize=1000)
+
+        logging.info("Company and program_company tables populated successfully.")
+    except Exception as e:
+        logging.error(f"An error occurred while populating company tables: {e}")
+        raise e
+
+    try:
+        # Drop existing tables
+        with engine.connect() as conn:
+            conn.execute(text("DROP TABLE IF EXISTS program_company"))
+            conn.execute(text("DROP TABLE IF EXISTS company CASCADE"))
+            conn.commit()
+
+        # Create tables
+        with engine.connect() as conn:
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS company (
+                    id SERIAL PRIMARY KEY,
+                    name TEXT UNIQUE
+                )
+            """))
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS program_company (
+                    program_id INT,
+                    company_id INT,
+                    PRIMARY KEY (program_id, company_id),
+                    FOREIGN KEY (program_id) REFERENCES all_programs(id),
+                    FOREIGN KEY (company_id) REFERENCES company(id)
+                )
+            """))
+            conn.commit()
+
+        # Process company data
+        company_names = set()
+        program_company_rows = []
+        for _, row in df.iterrows():
+            program_id = row['id']
+            companies = row.get('companies', '')
+            if pd.notna(companies):
+                for company in set(companies.split(', ')):
+                    company = company.strip()
+                    company_names.add(company)
+                    program_company_rows.append({'program_id': program_id, 'company_name': company})
+
+        company_df = pd.DataFrame(list(company_names), columns=['name'])
+        company_df.to_sql('company', engine, if_exists='append', index=False, method='multi', chunksize=1000)
+
+        # Get a map of company names to company IDs
+        with engine.connect() as conn:
+            company_map = pd.read_sql('SELECT id, name FROM company', conn)
+            company_map = dict(zip(company_map['name'], company_map['id']))
+
+        # Map program-company relationships
+        program_company_rows = [
+            {'program_id': row['program_id'], 'company_id': company_map.get(row['company_name'])}
+            for row in program_company_rows if row['company_name'] in company_map
+        ]
+
+        program_company_df = pd.DataFrame(program_company_rows).drop_duplicates()
+
+        # Log problematic foreign key pairs (if any)
+        with engine.connect() as conn:
+            valid_program_ids = pd.read_sql('SELECT id FROM all_programs', conn)['id'].tolist()
+        
+        invalid_program_ids = program_company_df[
+            ~program_company_df['program_id'].isin(valid_program_ids)
+        ]
+        
+        if not invalid_program_ids.empty:
+            logging.error(f"Foreign key violation: Invalid program IDs {invalid_program_ids}")
+            raise ValueError("Invalid program ID references.")
+
+        program_company_df.to_sql('program_company', engine, if_exists='append', index=False, method='multi', chunksize=1000)
+        logging.info("Company and program_company tables populated successfully.")
+    except Exception as e:
+        logging.error(f"An error occurred while populating company tables: {e}")
+
     """
     Create and populate the 'company' and 'program_company' tables in the PostgreSQL database.
     """    
