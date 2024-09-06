@@ -1,4 +1,5 @@
 # run_query.py
+# this code just runs a sql query to find orphaned programs in the database.
 
 from db_connection import get_postgres_engine
 import pandas as pd
