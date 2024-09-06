@@ -1,13 +1,14 @@
-# get_data.py
+# get_data.py: the script that loads data from Google Sheets and populates the database tables.
+# tim booher, 2021-09-07
+# license: public domain
 
 import os
 import pandas as pd
-from sqlalchemy import create_engine, text
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 from dotenv import load_dotenv
+from db_connection import get_postgres_engine, get_google_sheet_service
 import logging
-# create_and_populate_dependency_table
 from data_formatter import (
     create_and_populate_all_programs_table,
     create_and_populate_company_tables,
@@ -17,30 +18,15 @@ from data_formatter import (
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-# Load environment variables from .env file
-load_dotenv()
-
-# Google Sheets and PostgreSQL connection settings
-SERVICE_ACCOUNT_FILE = os.getenv('SERVICE_ACCOUNT_FILE')
-SPREADSHEET_ID = os.getenv('SPREADSHEET_ID')
-SHEET_NAME = os.getenv('SHEET_NAME')
-POSTGRES_USER = os.getenv('DATABASE_USER')
-POSTGRES_PASSWORD = os.getenv('DATABASE_PASSWORD')
-POSTGRES_DB = os.getenv('CURRENT_DB_NAME')
-POSTGRES_HOST = os.getenv('DATABASE_HOST')
-POSTGRES_PORT = os.getenv('LOCAL_DATABASE_PORT')
-CURRENT_TABLE_NAME = os.getenv('CURRENT_TABLE_NAME')
-
-# PostgreSQL connection string
-DATABASE_URL = f"postgresql://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}"
-
 def load_data_from_google_sheet():  
     try:
-        creds = Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE)
-        service = build('sheets', 'v4', credentials=creds)
-        sheet = service.spreadsheets()
+        # creds = Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE)
+        # service = build('sheets', 'v4', credentials=creds)
+        service = get_google_sheet_service()
+        SPREADSHEET_ID = os.getenv('SPREADSHEET_ID')
+        SHEET_NAME = os.getenv('SHEET_NAME')
 
-        result = sheet.values().get(spreadsheetId=SPREADSHEET_ID, range=SHEET_NAME).execute()
+        result = service.spreadsheets().values().get(spreadsheetId=SPREADSHEET_ID, range=SHEET_NAME).execute()
         values = result.get('values', [])
         
         if not values:
@@ -61,6 +47,9 @@ def load_data_from_google_sheet():
         # Ensure the column name is 'id' and not 'ID'
         if 'ID' in df.columns:
             df.rename(columns={'ID': 'id'}, inplace=True)
+
+        # Ensure the 'id' column is of integer type
+        df['id'] = df['id'].astype(int)
         
         return df
 
@@ -75,7 +64,7 @@ if __name__ == "__main__":
         logging.error("Failed to load data from Google Sheets. Exiting.")
         exit(1)
     
-    engine = create_engine(DATABASE_URL)
+    engine = get_postgres_engine()
     
     logging.info("Creating and populating all_programs table...")
     create_and_populate_all_programs_table(data_df, engine)

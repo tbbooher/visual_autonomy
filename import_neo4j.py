@@ -1,8 +1,8 @@
 import os
 import pandas as pd
-from sqlalchemy import create_engine
 from neo4j import GraphDatabase
 from dotenv import load_dotenv
+from db_connection import get_postgres_engine
 import logging
 
 # Set up logging
@@ -11,23 +11,13 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 # Load environment variables from .env file
 load_dotenv()
 
-# PostgreSQL connection settings
-POSTGRES_USER = os.getenv('DATABASE_USER')
-POSTGRES_PASSWORD = os.getenv('DATABASE_PASSWORD')
-POSTGRES_DB = os.getenv('CURRENT_DB_NAME')
-POSTGRES_HOST = os.getenv('DATABASE_HOST')
-POSTGRES_PORT = os.getenv('LOCAL_DATABASE_PORT')
-
 # Neo4j connection settings
 NEO4J_URI = "bolt://localhost:7687"
 NEO4J_USER = "neo4j"
 NEO4J_PASSWORD = os.getenv('NEO4J_PASSWORD')
 
-# PostgreSQL connection string
-DATABASE_URL = f"postgresql://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}"
-
 # Initialize PostgreSQL connection
-engine = create_engine(DATABASE_URL)
+engine = get_postgres_engine()
 
 # Initialize Neo4j driver
 neo4j_driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))

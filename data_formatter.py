@@ -107,7 +107,7 @@ def create_and_populate_all_programs_table(df, engine):
             logging.warning(f"Invalid or missing 'total_funding_m' in rows: {invalid_funding[['id', 'total_funding_m']].to_dict(orient='records')}")
 
         # Process 'Start Year' and 'End Year'
-        for date_col in ['Start Year', 'End Year']:
+        for date_col in ['start_year', 'end_year']:
             if date_col in df.columns:
                 df[date_col] = pd.to_datetime(df[date_col], format='%Y', errors='coerce')
             else:
