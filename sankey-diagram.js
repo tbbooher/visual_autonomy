@@ -8,14 +8,14 @@ document.addEventListener("DOMContentLoaded", function () {
     // Load data from an external JSON file
     d3.json("flow_data.json")
       .then(function (data) {
-        const margin = { top: 10, right: 10, bottom: 10, left: 10 };
-        const width = 900 - margin.left - margin.right;
-        const height = 600 - margin.top - margin.bottom;
-
         // Group data by unique source themes
         const themes = Array.from(new Set(data.map((d) => d.source_theme)));
 
         themes.forEach((theme) => {
+          let margin = { top: 10, right: 10, bottom: 10, left: 10 };
+          let width = 1100 - margin.left - margin.right;
+          const height = 600 - margin.top - margin.bottom;
+
           // Filter data for the current theme
           const themeData = data.filter((d) => d.source_theme === theme);
 
@@ -33,6 +33,11 @@ document.addEventListener("DOMContentLoaded", function () {
             .append("svg")
             .attr("width", width + margin.left + margin.right)
             .attr("height", height + margin.top + margin.bottom)
+            .call(
+              d3.zoom().on("zoom", function (event) {
+                svg.attr("transform", event.transform);
+              })
+            )
             .append("g")
             .attr("transform", `translate(${margin.left},${margin.top})`);
 
@@ -94,7 +99,7 @@ document.addEventListener("DOMContentLoaded", function () {
             .nodePadding(10)
             .extent([
               [1, 1],
-              [width - 1, height - 6],
+              [width - 150, height - 6],
             ])
             .nodeSort((a, b) => {
               const aTargets = sourceToTargetMap.get(a.index) || [];
@@ -110,6 +115,8 @@ document.addEventListener("DOMContentLoaded", function () {
             nodes: nodes.map((d) => Object.assign({}, d)), // Ensure we pass a copy
             links: links.map((d) => Object.assign({}, d)), // Ensure we pass a copy
           });
+
+          sankey.nodeSort(null); // disable nodeSort to enable draggable nodes
 
           // Create a map to store the base color for each target node
           const targetColors = new Map();
@@ -183,18 +190,10 @@ document.addEventListener("DOMContentLoaded", function () {
             .append("rect")
             .attr("class", "out-bar")
             .attr("x", sankey.nodeWidth() / 2)
-            .attr("y", (d) => {
-              if (isFinalNode(d)) {
-                const baseHeight = d.y1 - d.y0;
-                return (
-                  d.y1 - d.y0 - (d.targetFunding / d.fundingIn) * baseHeight
-                ); // Position the out-bar at the bottom of the in-bar
-              }
-            })
             .attr("height", (d) => {
               const baseHeight = d.y1 - d.y0;
               if (isFinalNode(d)) {
-                return (d.targetFunding / d.fundingIn) * baseHeight;
+                return 0;
               } else if (d.fundingOut > d.fundingIn) {
                 return baseHeight;
               } else {
@@ -214,6 +213,38 @@ document.addEventListener("DOMContentLoaded", function () {
             })
             .attr("opacity", 0.7);
 
+          // Create the wrapped bar segments for the final node
+          node
+            .filter((d) => isFinalNode(d))
+            .each(function (d) {
+              const baseHeight = d.y1 - d.y0;
+              const totalHeight = (d.targetFunding / d.fundingIn) * baseHeight;
+              const numSegments = Math.ceil(totalHeight / baseHeight);
+              const segmentHeight = baseHeight;
+
+              // const numSegments = Math.ceil(totalHeight / height);
+              // const segmentHeight = height;
+
+              for (let i = 0; i < numSegments; i++) {
+                const barHeight = Math.min(
+                  segmentHeight,
+                  totalHeight - i * segmentHeight
+                );
+                d3.select(this)
+                  .append("rect")
+                  .attr("class", "out-bar-segment")
+                  .attr("x", sankey.nodeWidth() / 2 + i * sankey.nodeWidth())
+                  .attr("y", (d) => {
+                    const baseHeight = d.y1 - d.y0;
+                    return -1 * barHeight + baseHeight;
+                  })
+                  .attr("height", barHeight)
+                  .attr("width", sankey.nodeWidth() / 2)
+                  .attr("fill", d3.color(targetColors.get(d.name)).darker(0.5))
+                  .attr("opacity", 0.7);
+              }
+            });
+
           node
             .append("text")
             .attr("x", (d) => (d.x0 < width / 2 ? 6 + sankey.nodeWidth() : -6))
@@ -222,9 +253,9 @@ document.addEventListener("DOMContentLoaded", function () {
             .attr("text-anchor", (d) => (d.x0 < width / 2 ? "start" : "end"))
             .text((d) => {
               if (isFinalNode(d)) {
-                return `${d.name} (${d.targetFunding})`;
+                return `${d.name}`;
               } else {
-                return `${d.name} (${d.fundingOut})`;
+                return `${d.name}`;
               }
             });
 
@@ -251,24 +282,48 @@ document.addEventListener("DOMContentLoaded", function () {
             );
 
           // The function for moving the nodes
-          function dragmove(d) {
+          function dragmove(event, d) {
+            d.y0 = Math.max(0, Math.min(height - (d.y1 - d.y0), event.y));
+            d.y1 = d.y0 + (d.y1 - d.y0);
             d3.select(this).attr(
               "transform",
-              "translate(" +
-                (d.x0 = Math.max(
-                  0,
-                  Math.min(width - sankey.nodeWidth(), d3.event.x)
-                )) +
-                "," +
-                (d.y0 = Math.max(
-                  0,
-                  Math.min(height - (d.y1 - d.y0), d3.event.y)
-                )) +
-                ")"
+              "translate(" + d.x0 + "," + d.y0 + ")"
             );
             sankey.update(graph);
             link.attr("d", d3.sankeyLinkHorizontal());
           }
+
+          // Calculate the scaling factor
+          const maxNodeValue = d3.max(graph.nodes, (d) => d.value);
+          const maxNodeHeight = d3.max(graph.nodes, (d) => d.y1 - d.y0);
+          const scalingFactor = maxNodeHeight / maxNodeValue;
+
+          // Calculate the height of a node with a value of 100M
+          const legendHeight = 100 * scalingFactor;
+
+          // Add legend
+          const legend = container
+            .append("svg")
+            .attr("width", 200)
+            .attr("height", legendHeight + 40) // Adjust height to fit the legend
+            .attr("class", "legend");
+
+          const legendGroup = legend.append("g");
+          const legendWidth = sankey.nodeWidth();
+
+          legendGroup
+            .append("rect")
+            .attr("width", legendWidth)
+            .attr("height", legendHeight)
+            .attr("fill", "#ccc")
+            .attr("opacity", 0.7);
+
+          legendGroup
+            .append("text")
+            .attr("x", legendWidth + 10)
+            .attr("y", legendHeight / 2)
+            .attr("dy", "0.35em")
+            .text("100M Value");
         });
       })
       .catch(function (error) {
