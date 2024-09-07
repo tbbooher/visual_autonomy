@@ -28,15 +28,15 @@ Ensure you have the following installed:
 
 You can install the necessary Python packages using the `pip` command:
 
-'''
+```
 pip install -r requirements.txt
-'''
+```
 
 ### Database Setup
 
 Make sure the following view is created in PostgreSQL:
 
-'''sql
+```sql
 CREATE VIEW program_company_value AS
 SELECT
     ap.id AS program_id,
@@ -46,6 +46,6 @@ FROM
     all_programs ap
 JOIN
     program_company pc ON ap.id = pc.program_id;
-'''
+```
 
 This view will help calculate the program funding value for each company based on the number of companies associated with a program.
