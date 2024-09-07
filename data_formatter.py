@@ -36,7 +36,8 @@ def create_and_populate_all_programs_table(df, engine):
                     dependency TEXT,
                     theme TEXT,
                     importance TEXT,
-                    notes_with_applied TEXT
+                    notes_with_applied TEXT,
+                    num_companies INT
                 )
             """))
             conn.commit()
@@ -97,9 +98,14 @@ def create_and_populate_all_programs_table(df, engine):
         df['total_funding_m'] = df['total_funding_m'].replace({r'[^\d.]': ''}, regex=True)
         df['total_funding_m'] = pd.to_numeric(df['total_funding_m'], errors='coerce')
 
-        # Convert start_year and end_year to full date format (e.g., '2024' -> '2024-01-01')
-        df['start_year'] = pd.to_datetime(df['start_year'], format='%Y', errors='coerce').dt.strftime('%Y-01-01')
-        df['end_year'] = pd.to_datetime(df['end_year'], format='%Y', errors='coerce').dt.strftime('%Y-12-31')
+        # Convert start_year and end_year from integers to full dates
+        df['start_year'] = pd.to_datetime(df['start_year'].astype(str) + '-01-01', errors='coerce')
+        df['end_year'] = pd.to_datetime(df['end_year'].astype(str) + '-12-31', errors='coerce')
+
+
+        # we need to calculate the number of companies
+        #df['num_companies'] = df['companies'].str.split(',').apply(lambda x: len(x) if pd.notna(x) else 0)
+        df['num_companies'] = df['companies'].apply(lambda x: len(x.split(',')) if pd.notna(x) else 0)
 
         # Log rows where 'total_funding_m' is missing or invalid
         invalid_funding = df[df['total_funding_m'].isnull()]
@@ -118,7 +124,7 @@ def create_and_populate_all_programs_table(df, engine):
         expected_columns = [
             'id', 'program_name', 'short_name', 'org', 'description', 'impact', 'status',
             'companies', 'total_funding_m', 'start_year', 'end_year', 'dependency',
-            'theme', 'importance', 'notes_with_applied'
+            'theme', 'importance', 'notes_with_applied', 'num_companies'
         ]
         existing_columns = [col for col in expected_columns if col in df.columns]
         df = df[existing_columns]

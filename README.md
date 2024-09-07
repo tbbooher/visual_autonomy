@@ -2,21 +2,6 @@
 
 This project processes and visualizes program data, focusing on dependencies and associations between various programs, companies, and themes. Data is imported from Google Sheets into a PostgreSQL database, transformed, and then loaded into a Neo4j graph database for visualization.
 
-## Table of Contents
-
-- [Overview](#overview)
-- [Setup](#setup)
-- [Environment Variables](#environment-variables)
-- [Scripts](#scripts)
-  - [Data Formatter](#data-formatter)
-  - [Get Data](#get-data)
-  - [Import to Neo4j](#import-to-neo4j)
-  - [Print Levels](#print-levels)
-  - [Process Sankey](#process-sankey)
-- [Usage](#usage)
-- [Contributing](#contributing)
-- [License](#license)
-
 ## Overview
 
 The project consists of multiple Python scripts that handle different parts of the ETL (Extract, Transform, Load) process:
@@ -42,3 +27,18 @@ You can install the necessary Python packages using `pip`:
 
 ```bash
 pip install -r requirements.txt
+
+### Database Setup
+
+Make sure to have this view
+```
+CREATE VIEW program_company_value AS
+SELECT
+    ap.id AS program_id,
+    pc.company_id,
+    ap.total_funding_m / ap.num_companies AS program_value
+FROM
+    all_programs ap
+JOIN
+    program_company pc ON ap.id = pc.program_id;
+```
