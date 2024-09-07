@@ -115,7 +115,10 @@ def create_views(engine):
                     program_company pc ON ap.id = pc.program_id;
             """))
             logging.info("View 'program_company_value' created successfully.")
-    
+            
+            # Commit the transaction and close the connection
+            conn.commit()
+
     except Exception as e:
         logging.error(f"An error occurred while creating views: {e}")
         raise e
