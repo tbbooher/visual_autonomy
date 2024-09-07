@@ -10,7 +10,7 @@ The project consists of multiple Python scripts that handle different parts of t
 1. **Extract** data from Google Sheets.
 2. **Transform** and clean the data.
 3. **Load** the data into a PostgreSQL database.
-4. **Visualize** relationships using Neo4j.
+4. **Visualize** relationships using Neo4j and d3.js (using python local server)
 
 ## Setup
 
