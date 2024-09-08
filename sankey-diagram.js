@@ -43,26 +43,31 @@ document.addEventListener("DOMContentLoaded", function () {
             .append("g")
             .attr("transform", `translate(${margin.left},${margin.top})`);
 
-          // Inside your DOMContentLoaded event listener, after creating the svg element:
-          const nodeTooltip = tooltip()
-            .html((d) => {
-              return `
-                <strong>${d.name}</strong><br>
-                Total Funding In: $${d.fundingIn.toFixed(2)}M<br>
-                Total Funding Out: $${d.fundingOut.toFixed(2)}M<br>
-                Target Funding: $${d.targetFunding.toFixed(2)}M
-              `;
-            });
+          // Create a tooltip div that is hidden by default
+          const tooltip = d3.select("body").append("div")
+          .attr("class", "d3-tooltip")
+          .style("opacity", 0);
 
-          const linkTooltip = tooltip()
-            .html((d) => {
-              return `
-                <strong>${d.source.name} → ${d.target.name}</strong><br>
-                Value: $${d.value.toFixed(2)}M<br>
-                Source Funding: $${d.source_funding.toFixed(2)}M<br>
-                Target Funding: $${d.target_funding.toFixed(2)}M
-              `;
-            });
+          // // Inside your DOMContentLoaded event listener, after creating the svg element:
+          // const nodeTooltip = tooltip()
+          //   .html((d) => {
+          //     return `
+          //       <strong>${d.name}</strong><br>
+          //       Total Funding In: $${d.fundingIn.toFixed(2)}M<br>
+          //       Total Funding Out: $${d.fundingOut.toFixed(2)}M<br>
+          //       Target Funding: $${d.targetFunding.toFixed(2)}M
+          //     `;
+          //   });
+
+          // const linkTooltip = tooltip()
+          //   .html((d) => {
+          //     return `
+          //       <strong>${d.source.name} → ${d.target.name}</strong><br>
+          //       Value: $${d.value.toFixed(2)}M<br>
+          //       Source Funding: $${d.source_funding.toFixed(2)}M<br>
+          //       Target Funding: $${d.target_funding.toFixed(2)}M
+          //     `;
+          //   });
 
           // Create a color scale for the nodes
           const targetColorScale = d3.scaleOrdinal(d3.schemeTableau10);
@@ -115,11 +120,6 @@ document.addEventListener("DOMContentLoaded", function () {
             }
             sourceToTargetMap.get(link.source).push(link.target);
           });
-
-          // Create a tooltip div that is hidden by default
-          const tooltip = d3.select("body").append("div")
-            .attr("class", "d3-tooltip")
-            .style("opacity", 0);
 
           const sankey = d3
             .sankey()
