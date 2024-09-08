@@ -1,29 +1,14 @@
-import os
 import pandas as pd
-from sqlalchemy import create_engine
-from dotenv import load_dotenv
 import json
-
-# Load environment variables from .env file
-load_dotenv()
-
-# PostgreSQL connection settings
-POSTGRES_USER = os.getenv('DATABASE_USER')
-POSTGRES_PASSWORD = os.getenv('DATABASE_PASSWORD')
-POSTGRES_DB = os.getenv('CURRENT_DB_NAME')
-POSTGRES_HOST = os.getenv('DATABASE_HOST')
-POSTGRES_PORT = os.getenv('LOCAL_DATABASE_PORT')
-
-# PostgreSQL connection string
-DATABASE_URL = f"postgresql://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}"
-
-# Initialize PostgreSQL connection
-engine = create_engine(DATABASE_URL)
+from db_connection import get_postgres_engine
 
 def extract_and_process_data():
     """
     Extract data from PostgreSQL using a direct SQL query, process it, and prepare for Sankey diagram.
     """
+    # Initialize PostgreSQL connection using db_connection module
+    engine = get_postgres_engine()
+
     # SQL query to extract source, target, source funding, target funding, value, and themes
     query = """
             SELECT 
