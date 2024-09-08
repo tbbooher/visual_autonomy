@@ -16,17 +16,6 @@ from data_formatter import (
     create_and_populate_dependency_table,  # Import the new function
 )
 
-# make sure to create this view in the database
-# CREATE VIEW program_company_value AS
-# SELECT
-#     ap.id AS program_id,
-#     pc.company_id,
-#     ap.total_funding_m / ap.num_companies AS program_value
-# FROM
-#     all_programs ap
-# JOIN
-#     program_company pc ON ap.id = pc.program_id;
-
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
