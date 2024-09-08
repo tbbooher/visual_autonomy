@@ -14,11 +14,16 @@ def extract_and_process_data():
             SELECT 
                 source_program.short_name AS source,
                 target_program.short_name AS target,
+                source_program.org AS source_org,
+                source_program.program_name AS source_name,
+                target_program.program_name AS target_name,
                 source_program.total_funding_m AS source_funding,
                 target_program.total_funding_m AS target_funding,
                 COALESCE(source_program.total_funding_m, target_program.total_funding_m) AS value,
                 source_program.theme AS source_theme,
-                target_program.theme AS target_theme
+                target_program.theme AS target_theme,
+                source_program.companies AS source_companies,
+                source_program.description AS source_description
             FROM 
                 program_dependencies
             JOIN 
@@ -43,6 +48,11 @@ def extract_and_process_data():
         value = row['value']
         source_theme = row['source_theme']
         target_theme = row['target_theme']
+        source_companies = row['source_companies']
+        source_description = row['source_description']
+        source_name = row['source_name']
+        target_name = row['target_name']
+        source_org = row['source_org']
         
         # Append to list for JSON output
         data.append({
@@ -52,7 +62,12 @@ def extract_and_process_data():
             "target_funding": target_funding,
             "value": value,
             "source_theme": source_theme,
-            "target_theme": target_theme
+            "target_theme": target_theme,
+            "source_companies": source_companies,
+            "source_description": source_description,
+            "source_name": source_name,
+            "target_name": target_name,
+            "source_org": source_org
         })
         
         # Prepare text output correctly

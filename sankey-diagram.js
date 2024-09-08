@@ -1,4 +1,5 @@
-
+// Description: Create a Sankey diagram using D3.js
+// Author: Tim Booher and Emily 
 
 document.addEventListener("DOMContentLoaded", function () {
   console.log("DOM loaded");
@@ -45,29 +46,8 @@ document.addEventListener("DOMContentLoaded", function () {
 
           // Create a tooltip div that is hidden by default
           const tooltip = d3.select("body").append("div")
-          .attr("class", "d3-tooltip")
-          .style("opacity", 0);
-
-          // // Inside your DOMContentLoaded event listener, after creating the svg element:
-          // const nodeTooltip = tooltip()
-          //   .html((d) => {
-          //     return `
-          //       <strong>${d.name}</strong><br>
-          //       Total Funding In: $${d.fundingIn.toFixed(2)}M<br>
-          //       Total Funding Out: $${d.fundingOut.toFixed(2)}M<br>
-          //       Target Funding: $${d.targetFunding.toFixed(2)}M
-          //     `;
-          //   });
-
-          // const linkTooltip = tooltip()
-          //   .html((d) => {
-          //     return `
-          //       <strong>${d.source.name} → ${d.target.name}</strong><br>
-          //       Value: $${d.value.toFixed(2)}M<br>
-          //       Source Funding: $${d.source_funding.toFixed(2)}M<br>
-          //       Target Funding: $${d.target_funding.toFixed(2)}M
-          //     `;
-          //   });
+            .attr("class", "d3-tooltip")
+            .style("opacity", 0);
 
           // Create a color scale for the nodes
           const targetColorScale = d3.scaleOrdinal(d3.schemeTableau10);
@@ -80,12 +60,20 @@ document.addEventListener("DOMContentLoaded", function () {
           });
 
           // Create an array of node objects with funding information
-          const nodes = Array.from(nodeNames).map((name) => ({
-            name: name,
-            fundingIn: 0,
-            fundingOut: 0,
-            targetFunding: 0, // Add targetFunding to handle final node case
-          }));
+          const nodes = Array.from(nodeNames).map((name) => {
+            const themeNodeData = themeData.filter((d) => d.source === name || d.target === name);
+            const nodeData = themeNodeData[0];
+            return {
+              name: name,
+              fundingIn: 0,
+              fundingOut: 0,
+              targetFunding: 0, // Add targetFunding to handle final node case
+              source_companies: nodeData ? nodeData.source_companies : "no data",
+              source_description: nodeData ? nodeData.source_description : "no data",
+              source_name: nodeData ? nodeData.source_name : "no data",
+              source_org: nodeData ? nodeData.source_org : "no data",
+            };
+          });
 
           // Calculate total funding for each node
           themeData.forEach((d) => {
@@ -110,6 +98,10 @@ document.addEventListener("DOMContentLoaded", function () {
             value: d.value,
             source_funding: d.source_funding || 0,
             target_funding: d.target_funding || 0,
+            source_description: d.source_description || "no data",
+            source_companies: d.source_companies || "no data",
+            source_name: d.source_name || "no data",
+            source_org: d.source_org || "no data",
           }));
 
           // Create a map of source nodes to their target nodes
@@ -168,58 +160,61 @@ document.addEventListener("DOMContentLoaded", function () {
             .attr("class", "link")
             .attr("d", d3.sankeyLinkHorizontal())
             .style("stroke-width", (d) => Math.max(1, d.width))
-            .on("mouseover", function(event, d) {
+            .on("mouseover", function (event, d) {
               tooltip.transition()
                 .duration(200)
                 .style("opacity", .9);
-              tooltip.html(`<strong>${d.source.name} → ${d.target.name}</strong><br>` +
-                          `Value: $${d.value.toFixed(2)}M<br>` +
-                          `Source Funding: $${d.source_funding.toFixed(2)}M<br>` +
-                          `Target Funding: $${d.target_funding.toFixed(2)}M`)
+              tooltip.html(`<strong>${d.source.source_name} → ${d.target.name}</strong><br>` +
+                'Description: ' + d.source_description + '<br>' +
+                'Companies: ' + d.source_companies + '<br>' +
+                `Value: $${d.value.toFixed(2)}M<br>` +
+                `Source Funding: $${d.source_funding.toFixed(2)}M<br>` +
+                `Source Org: ${d.source_org}<br>` +
+                `Target Funding: $${d.target_funding.toFixed(2)}M`)
                 .style("left", (event.pageX) + "px")
                 .style("top", (event.pageY - 28) + "px");
             })
-            .on("mouseout", function(d) {
+            .on("mouseout", function () {
               tooltip.transition()
                 .duration(500)
                 .style("opacity", 0);
             });
-        
 
-            const node = svg
-              .append("g")
-              .selectAll(".node")
-              .data(graph.nodes)
-              .enter()
-              .append("g")
-              .attr("class", "node")
-              .attr("transform", (d) => `translate(${d.x0},${d.y0})`)
-              .call(
-                d3.drag()
-                  .subject(function (d) {
-                    return d;
-                  })
-                  .on("start", function () {
-                    this.parentNode.appendChild(this);
-                  })
-                  .on("drag", dragmove)
-              )
-              .on("mouseover", function(event, d) {
-                tooltip.transition()
-                  .duration(200)
-                  .style("opacity", .9);
-                tooltip.html(`<strong>${d.name}</strong><br>` +
-                            `Total Funding In: $${d.fundingIn.toFixed(2)}M<br>` +
-                            `Total Funding Out: $${d.fundingOut.toFixed(2)}M<br>` +
-                            `Target Funding: $${d.targetFunding.toFixed(2)}M`)
-                  .style("left", (event.pageX) + "px")
-                  .style("top", (event.pageY - 28) + "px");
-              })
-              .on("mouseout", function(d) {
-                tooltip.transition()
-                  .duration(500)
-                  .style("opacity", 0);
-              });
+
+          const node = svg
+            .append("g")
+            .selectAll(".node")
+            .data(graph.nodes)
+            .enter()
+            .append("g")
+            .attr("class", "node")
+            .attr("transform", (d) => `translate(${d.x0},${d.y0})`)
+            .call(
+              d3.drag()
+                .subject(function (d) {
+                  return d;
+                })
+                .on("start", function () {
+                  this.parentNode.appendChild(this);
+                })
+                .on("drag", dragmove)
+            )
+            .on("mouseover", function (event, d) {
+              tooltip.transition()
+                .duration(200)
+                .style("opacity", .9);
+              tooltip.html(`<strong>${d.name}</strong><br>` +
+                `Total Funding In: $${d.fundingIn.toFixed(2)}M<br>` +
+                `Total Funding Out: $${d.fundingOut.toFixed(2)}M<br>` +
+                `Target Funding: $${d.targetFunding.toFixed(2)}M`)
+                .style("left", (event.pageX) + "px")
+                .style("top", (event.pageY - 28) + "px");
+            })
+            .on("mouseout", function (d) {
+              tooltip.transition()
+                .duration(500)
+                .style("opacity", 0);
+            });
 
           // Create the in-bar with adjusted height
           node
@@ -319,27 +314,28 @@ document.addEventListener("DOMContentLoaded", function () {
               }
             });
 
-          // node
-          //   .append("title")
-          //   .text(
-          //     (d) =>
-          //       `${d.name}\nTotal Funding In: $${d.fundingIn.toFixed(
-          //         2
-          //       )}M\nTotal Funding Out: $${d.fundingOut.toFixed(
-          //         2
-          //       )}M\nTarget Funding: $${d.targetFunding.toFixed(2)}M`
-          //   );
-
-          link
+          node
             .append("title")
             .text(
               (d) =>
-                `${d.source.name} → ${d.target.name}\nValue: $${d.value.toFixed(
-                  2
-                )}M\nSource Funding: $${d.source_funding.toFixed(
-                  2
-                )}M\nTarget Funding: $${d.target_funding.toFixed(2)}M`
+                `${d.source_name}\n` +
+                `Description: ${d.source_description || "No description available"}\n` +
+                `Companies: ${d.source_companies || "No companies available"}\n` +
+                `Source Org: ${d.source_org}\n` +
+                `Total Funding In: $${d.fundingIn.toFixed(2)}M\n` +
+                `Total Funding Out: $${d.fundingOut.toFixed(2)}M\n` +
+                `Target Funding: $${d.targetFunding.toFixed(2)}M`
             );
+
+            link
+              .append("title")
+              .text((d) =>
+                `${d.source.source_name} → ${d.target.name}\n` +
+                `Source Org: ${d.source.source_org}\n` +         
+                `Value: $${d.value.toFixed(2)}M\n` +
+                `Companies: ${d.source_companies || "No companies available"}\n` +
+                `Description: ${d.source_description || "No description available"}`
+              );
 
           // The function for moving the nodes
           function dragmove(event, d) {
