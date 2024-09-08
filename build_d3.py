@@ -1,48 +1,30 @@
-import os
 import pandas as pd
-from sqlalchemy import create_engine
-from dotenv import load_dotenv
 import json
-
-# Load environment variables from .env file
-load_dotenv()
-
-# PostgreSQL connection settings
-POSTGRES_USER = os.getenv('DATABASE_USER')
-POSTGRES_PASSWORD = os.getenv('DATABASE_PASSWORD')
-POSTGRES_DB = os.getenv('CURRENT_DB_NAME')
-POSTGRES_HOST = os.getenv('DATABASE_HOST')
-POSTGRES_PORT = os.getenv('LOCAL_DATABASE_PORT')
-
-# PostgreSQL connection string
-DATABASE_URL = f"postgresql://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}"
-
-# Initialize PostgreSQL connection
-engine = create_engine(DATABASE_URL)
+from db_connection import get_postgres_engine
 
 def extract_and_process_data():
     """
     Extract data from PostgreSQL using a direct SQL query, process it, and prepare for Sankey diagram.
     """
+    # Initialize PostgreSQL connection using db_connection module
+    engine = get_postgres_engine()
+
+    # SQL query to extract source, target, source funding, target funding, value, and themes
     query = """
-        SELECT 
-            source_program.short_name AS source,
-            target_program.short_name AS target,
-            source_program.total_funding_m AS source_funding,
-            target_program.total_funding_m AS target_funding,
-            COALESCE(source_program.total_funding_m, target_program.total_funding_m) AS value,
-            source_program.theme AS source_theme,
-            target_program.theme AS target_theme,
-            source_program.program_name AS source_program_name,
-            target_program.program_name AS target_program_name,
-            source_program.companies AS source_companies,
-            target_program.companies AS target_companies,
-            source_program.description AS source_description,
-            target_program.description AS target_description
-        FROM 
-            all_programs AS source_program
-        JOIN 
-            all_programs AS target_program ON source_program.id = target_program.id;
+            SELECT 
+                source_program.short_name AS source,
+                target_program.short_name AS target,
+                source_program.total_funding_m AS source_funding,
+                target_program.total_funding_m AS target_funding,
+                COALESCE(source_program.total_funding_m, target_program.total_funding_m) AS value,
+                source_program.theme AS source_theme,
+                target_program.theme AS target_theme
+            FROM 
+                program_dependencies
+            JOIN 
+                all_programs AS source_program ON program_dependencies.dependency_id = source_program.id
+            JOIN 
+                all_programs AS target_program ON program_dependencies.program_id = target_program.id;
     """
     
     # Execute the SQL query
@@ -61,12 +43,6 @@ def extract_and_process_data():
         value = row['value']
         source_theme = row['source_theme']
         target_theme = row['target_theme']
-        source_program_name = row['source_program_name']
-        target_program_name = row['target_program_name']
-        source_companies = row['source_companies']
-        target_companies = row['target_companies']
-        source_description = row['source_description']
-        target_description = row['target_description']
         
         # Append to list for JSON output
         data.append({
@@ -76,13 +52,7 @@ def extract_and_process_data():
             "target_funding": target_funding,
             "value": value,
             "source_theme": source_theme,
-            "target_theme": target_theme,
-            "source_program_name": source_program_name,
-            "target_program_name": target_program_name,
-            "source_companies": source_companies,
-            "target_companies": target_companies,
-            "source_description": source_description,
-            "target_description": target_description
+            "target_theme": target_theme
         })
         
         # Prepare text output correctly

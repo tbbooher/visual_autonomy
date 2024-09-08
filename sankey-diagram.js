@@ -1,3 +1,5 @@
+
+
 document.addEventListener("DOMContentLoaded", function () {
   console.log("DOM loaded");
   try {
@@ -40,6 +42,32 @@ document.addEventListener("DOMContentLoaded", function () {
             )
             .append("g")
             .attr("transform", `translate(${margin.left},${margin.top})`);
+
+          // Create a tooltip div that is hidden by default
+          const tooltip = d3.select("body").append("div")
+          .attr("class", "d3-tooltip")
+          .style("opacity", 0);
+
+          // // Inside your DOMContentLoaded event listener, after creating the svg element:
+          // const nodeTooltip = tooltip()
+          //   .html((d) => {
+          //     return `
+          //       <strong>${d.name}</strong><br>
+          //       Total Funding In: $${d.fundingIn.toFixed(2)}M<br>
+          //       Total Funding Out: $${d.fundingOut.toFixed(2)}M<br>
+          //       Target Funding: $${d.targetFunding.toFixed(2)}M
+          //     `;
+          //   });
+
+          // const linkTooltip = tooltip()
+          //   .html((d) => {
+          //     return `
+          //       <strong>${d.source.name} → ${d.target.name}</strong><br>
+          //       Value: $${d.value.toFixed(2)}M<br>
+          //       Source Funding: $${d.source_funding.toFixed(2)}M<br>
+          //       Target Funding: $${d.target_funding.toFixed(2)}M
+          //     `;
+          //   });
 
           // Create a color scale for the nodes
           const targetColorScale = d3.scaleOrdinal(d3.schemeTableau10);
@@ -139,27 +167,59 @@ document.addEventListener("DOMContentLoaded", function () {
             .append("path")
             .attr("class", "link")
             .attr("d", d3.sankeyLinkHorizontal())
-            .style("stroke-width", (d) => Math.max(1, d.width));
+            .style("stroke-width", (d) => Math.max(1, d.width))
+            .on("mouseover", function(event, d) {
+              tooltip.transition()
+                .duration(200)
+                .style("opacity", .9);
+              tooltip.html(`<strong>${d.source.name} → ${d.target.name}</strong><br>` +
+                          `Value: $${d.value.toFixed(2)}M<br>` +
+                          `Source Funding: $${d.source_funding.toFixed(2)}M<br>` +
+                          `Target Funding: $${d.target_funding.toFixed(2)}M`)
+                .style("left", (event.pageX) + "px")
+                .style("top", (event.pageY - 28) + "px");
+            })
+            .on("mouseout", function(d) {
+              tooltip.transition()
+                .duration(500)
+                .style("opacity", 0);
+            });
+        
 
-          const node = svg
-            .append("g")
-            .selectAll(".node")
-            .data(graph.nodes)
-            .enter()
-            .append("g")
-            .attr("class", "node")
-            .attr("transform", (d) => `translate(${d.x0},${d.y0})`)
-            .call(
-              d3
-                .drag()
-                .subject(function (d) {
-                  return d;
-                })
-                .on("start", function () {
-                  this.parentNode.appendChild(this);
-                })
-                .on("drag", dragmove)
-            );
+            const node = svg
+              .append("g")
+              .selectAll(".node")
+              .data(graph.nodes)
+              .enter()
+              .append("g")
+              .attr("class", "node")
+              .attr("transform", (d) => `translate(${d.x0},${d.y0})`)
+              .call(
+                d3.drag()
+                  .subject(function (d) {
+                    return d;
+                  })
+                  .on("start", function () {
+                    this.parentNode.appendChild(this);
+                  })
+                  .on("drag", dragmove)
+              )
+              .on("mouseover", function(event, d) {
+                tooltip.transition()
+                  .duration(200)
+                  .style("opacity", .9);
+                tooltip.html(`<strong>${d.name}</strong><br>` +
+                            `Total Funding In: $${d.fundingIn.toFixed(2)}M<br>` +
+                            `Total Funding Out: $${d.fundingOut.toFixed(2)}M<br>` +
+                            `Target Funding: $${d.targetFunding.toFixed(2)}M`)
+                  .style("left", (event.pageX) + "px")
+                  .style("top", (event.pageY - 28) + "px");
+              })
+              .on("mouseout", function(d) {
+                tooltip.transition()
+                  .duration(500)
+                  .style("opacity", 0);
+              });
 
           // Create the in-bar with adjusted height
           node
@@ -259,16 +319,16 @@ document.addEventListener("DOMContentLoaded", function () {
               }
             });
 
-          node
-            .append("title")
-            .text(
-              (d) =>
-                `${d.name}\nTotal Funding In: $${d.fundingIn.toFixed(
-                  2
-                )}M\nTotal Funding Out: $${d.fundingOut.toFixed(
-                  2
-                )}M\nTarget Funding: $${d.targetFunding.toFixed(2)}M`
-            );
+          // node
+          //   .append("title")
+          //   .text(
+          //     (d) =>
+          //       `${d.name}\nTotal Funding In: $${d.fundingIn.toFixed(
+          //         2
+          //       )}M\nTotal Funding Out: $${d.fundingOut.toFixed(
+          //         2
+          //       )}M\nTarget Funding: $${d.targetFunding.toFixed(2)}M`
+          //   );
 
           link
             .append("title")
