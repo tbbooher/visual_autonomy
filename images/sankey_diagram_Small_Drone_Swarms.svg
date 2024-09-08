@@ -1,0 +1,70 @@
+<svg width="1100" height="600"><g transform="translate(10,10)"><g><path class="link" d="M31,31.765C465.5,31.765,465.5,52.948,900,52.948" style="stroke-width: 61.5291;"><title>A2E → Replicator
+Value: $100.00M
+Source Funding: $100.00M
+Target Funding: $1000.00M</title></path><path class="link" d="M31,79.451C465.5,79.451,465.5,90.635,900,90.635" style="stroke-width: 13.844;"><title>Persistent Locust → Replicator
+Value: $22.50M
+Source Funding: $22.50M
+Target Funding: $1000.00M</title></path><path class="link" d="M31,133.291C465.5,133.291,465.5,134.474,900,134.474" style="stroke-width: 73.8349;"><title>ALE → Replicator
+Value: $120.00M
+Source Funding: $120.00M
+Target Funding: $1000.00M</title></path><path class="link" d="M31,297.884C128.375,297.884,128.375,312.757,225.75,312.757" style="stroke-width: 123.058;"><title>OFFSET → AISUM
+Value: $200.00M
+Source Funding: $200.00M
+Target Funding: $50.00M</title></path><path class="link" d="M480.5,274.156C577.875,274.156,577.875,273.991,675.25,273.991" style="stroke-width: 46.1468;"><title>SESU → BUAS
+Value: $75.00M
+Source Funding: $75.00M
+Target Funding: $200.00M</title></path><path class="link" d="M705.25,312.446C802.625,312.446,802.625,279.067,900,279.067" style="stroke-width: 123.058;"><title>BUAS → Replicator
+Value: $200.00M
+Source Funding: $200.00M
+Target Funding: $1000.00M</title></path><path class="link" d="M31,384.795C128.375,384.795,128.375,389.668,225.75,389.668" style="stroke-width: 30.7645;"><title>SUSEX → AISUM
+Value: $50.00M
+Source Funding: $50.00M
+Target Funding: $50.00M</title></path><path class="link" d="M31,425.56C128.375,425.56,128.375,420.433,225.75,420.433" style="stroke-width: 30.7645;"><title>SECTR → AISUM
+Value: $50.00M
+Source Funding: $50.00M
+Target Funding: $50.00M</title></path><path class="link" d="M255.75,266.61C353.125,266.61,353.125,266.465,450.5,266.465" style="stroke-width: 30.7645;"><title>AISUM → SESU
+Value: $50.00M
+Source Funding: $50.00M
+Target Funding: $75.00M</title></path><path class="link" d="M31,203.281C465.5,203.281,465.5,194.465,900,194.465" style="stroke-width: 46.1468;"><title>HAVOC → Replicator
+Value: $75.00M
+Source Funding: $75.00M
+Target Funding: $1000.00M</title></path><path class="link" d="M31,512.471C128.375,512.471,128.375,497.344,225.75,497.344" style="stroke-width: 123.058;"><title>ARMS → AISUM
+Value: $200.00M
+Source Funding: $200.00M
+Target Funding: $50.00M</title></path></g><g><g class="node" transform="translate(1,1)"><rect class="in-bar" x="0" height="0" width="15" fill="#4e79a7" opacity="0.7"></rect><rect class="out-bar" x="15" height="61.52905198776759" width="15" fill="rgb(65, 101, 140)" opacity="0.7"></rect><text x="36" y="30.764525993883794" dy="0.35em" text-anchor="start">A2E</text><title>A2E
+Total Funding In: $0.00M
+Total Funding Out: $100.00M
+Target Funding: $0.00M</title></g><g class="node" transform="translate(900,22.18348526881435)"><rect class="in-bar" x="0" height="318.41284403669715" width="15" fill="#4e79a7" opacity="0.7"></rect><rect class="out-bar" x="15" height="0" width="15" fill="rgb(65, 101, 140)" opacity="0.7"></rect><rect class="out-bar-segment" x="15" y="0" height="318.41284403669715" width="15" fill="rgb(65, 101, 140)" opacity="0.7"></rect><rect class="out-bar-segment" x="45" y="21.53516819571871" height="296.87767584097844" width="15" fill="rgb(65, 101, 140)" opacity="0.7"></rect><text x="-6" y="159.20642201834858" dy="0.35em" text-anchor="end">Replicator</text><title>Replicator
+Total Funding In: $517.50M
+Total Funding Out: $0.00M
+Target Funding: $1000.00M</title></g><g class="node" transform="translate(1,72.52905198776759)"><rect class="in-bar" x="0" height="0" width="15" fill="#4e79a7" opacity="0.7"></rect><rect class="out-bar" x="15" height="13.844036697247702" width="15" fill="rgb(65, 101, 140)" opacity="0.7"></rect><text x="36" y="6.922018348623851" dy="0.35em" text-anchor="start">Persistent Locust</text><title>Persistent Locust
+Total Funding In: $0.00M
+Total Funding Out: $22.50M
+Target Funding: $0.00M</title></g><g class="node" transform="translate(1,96.37308868501529)"><rect class="in-bar" x="0" height="0" width="15" fill="#4e79a7" opacity="0.7"></rect><rect class="out-bar" x="15" height="73.83486238532109" width="15" fill="rgb(65, 101, 140)" opacity="0.7"></rect><text x="36" y="36.917431192660544" dy="0.35em" text-anchor="start">ALE</text><title>ALE
+Total Funding In: $0.00M
+Total Funding Out: $120.00M
+Target Funding: $0.00M</title></g><g class="node" transform="translate(1,236.354740061162)"><rect class="in-bar" x="0" height="0" width="15" fill="#f28e2c" opacity="0.7"></rect><rect class="out-bar" x="15" height="123.05810397553503" width="15" fill="rgb(202, 119, 37)" opacity="0.7"></rect><text x="36" y="61.52905198776752" dy="0.35em" text-anchor="start">OFFSET</text><title>OFFSET
+Total Funding In: $0.00M
+Total Funding Out: $200.00M
+Target Funding: $0.00M</title></g><g class="node" transform="translate(225.75,251.2281063806138)"><rect class="in-bar" x="0" height="307.64525993883797" width="15" fill="#e15759" opacity="0.7"></rect><rect class="out-bar" x="15" height="30.764525993883797" width="15" fill="rgb(188, 73, 74)" opacity="0.7"></rect><text x="36" y="153.82262996941898" dy="0.35em" text-anchor="start">AISUM</text><title>AISUM
+Total Funding In: $500.00M
+Total Funding Out: $50.00M
+Target Funding: $50.00M</title></g><g class="node" transform="translate(450.5,251.08250019530487)"><rect class="in-bar" x="0" height="30.76452599388373" width="15" fill="#76b7b2" opacity="0.7"></rect><rect class="out-bar" x="15" height="46.1467889908256" width="15" fill="rgb(99, 153, 149)" opacity="0.7"></rect><text x="36" y="23.0733944954128" dy="0.35em" text-anchor="start">SESU</text><title>SESU
+Total Funding In: $50.00M
+Total Funding Out: $75.00M
+Target Funding: $75.00M</title></g><g class="node" transform="translate(675.25,250.9173572874224)"><rect class="in-bar" x="0" height="46.146788990825684" width="15" fill="#4e79a7" opacity="0.7"></rect><rect class="out-bar" x="15" height="123.05810397553515" width="15" fill="rgb(65, 101, 140)" opacity="0.7"></rect><text x="-6" y="61.52905198776757" dy="0.35em" text-anchor="end">BUAS</text><title>BUAS
+Total Funding In: $75.00M
+Total Funding Out: $200.00M
+Target Funding: $200.00M</title></g><g class="node" transform="translate(1,369.41284403669704)"><rect class="in-bar" x="0" height="0" width="15" fill="#f28e2c" opacity="0.7"></rect><rect class="out-bar" x="15" height="30.764525993883808" width="15" fill="rgb(202, 119, 37)" opacity="0.7"></rect><text x="36" y="15.382262996941904" dy="0.35em" text-anchor="start">SUSEX</text><title>SUSEX
+Total Funding In: $0.00M
+Total Funding Out: $50.00M
+Target Funding: $0.00M</title></g><g class="node" transform="translate(1,410.17737003058085)"><rect class="in-bar" x="0" height="0" width="15" fill="#f28e2c" opacity="0.7"></rect><rect class="out-bar" x="15" height="30.764525993883808" width="15" fill="rgb(202, 119, 37)" opacity="0.7"></rect><text x="36" y="15.382262996941904" dy="0.35em" text-anchor="start">SECTR</text><title>SECTR
+Total Funding In: $0.00M
+Total Funding Out: $50.00M
+Target Funding: $0.00M</title></g><g class="node" transform="translate(1,180.20795107033638)"><rect class="in-bar" x="0" height="0" width="15" fill="#4e79a7" opacity="0.7"></rect><rect class="out-bar" x="15" height="46.14678899082563" width="15" fill="rgb(65, 101, 140)" opacity="0.7"></rect><text x="36" y="23.073394495412813" dy="0.35em" text-anchor="start">HAVOC</text><title>HAVOC
+Total Funding In: $0.00M
+Total Funding Out: $75.00M
+Target Funding: $0.00M</title></g><g class="node" transform="translate(1,450.94189602446465)"><rect class="in-bar" x="0" height="0" width="15" fill="#f28e2c" opacity="0.7"></rect><rect class="out-bar" x="15" height="123.05810397553535" width="15" fill="rgb(202, 119, 37)" opacity="0.7"></rect><text x="36" y="61.52905198776767" dy="0.35em" text-anchor="start">ARMS</text><title>ARMS
+Total Funding In: $0.00M
+Total Funding Out: $200.00M
+Target Funding: $0.00M</title></g></g></g></svg>
