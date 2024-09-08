@@ -2,6 +2,11 @@ from selenium import webdriver
 from selenium.webdriver.common.by import By
 import time
 
+# this code doesn't work. it renders each svg, but not enough style is embedded in the svg to make it look like the original
+# the original svg is rendered by the browser, and the browser applies the css to the svg
+# the svg is not a static image, it is a dynamic image that is rendered by the browser
+# need to address this in the future
+
 # Set up the webdriver
 driver = webdriver.Chrome()
 
