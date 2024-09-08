@@ -1,42 +1,52 @@
 <!DOCTYPE html>
 <html lang="en">
- 
+
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Sankey Diagram: Source and Target Funding</title>
-  <script src=https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js></script>
-  <script src=https://cdnjs.cloudflare.com/ajax/libs/d3-sankey/0.12.3/d3-sankey.min.js></script>
-  <style>
-    .node rect {
-      cursor: move;
-      fill-opacity: .9;
-      shape-rendering: crispEdges;
-    }
- 
-    .node text {
-      pointer-events: none;
-      font-family: Arial, sans-serif;
-     font-size: 12px;
-    }
- 
-    .link {
-      fill: none;
-      stroke: #000;
-      stroke-opacity: .2;
-    }
- 
-    .link:hover {
-      stroke-opacity: .5;
-    }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sankey Diagram: Source and Target Funding</title>
+    <script src=https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js></script>
+    <script src=https://cdnjs.cloudflare.com/ajax/libs/d3-sankey/0.12.3/d3-sankey.min.js></script>
+    <style>
+        .node rect {
+            cursor: move;
+            fill-opacity: .9;
+            shape-rendering: crispEdges;
+        }
+
+        .node text {
+            pointer-events: none;
+            font-family: Arial, sans-serif;
+            font-size: 12px;
+        }
+
+        .link {
+            fill: none;
+            stroke: #000;
+            stroke-opacity: .2;
+        }
+
+        .link:hover {
+            stroke-opacity: .5;
+        }
+
+        .d3-tooltip {
+            line-height: 1.5;
+            font-weight: 400;
+            padding: 12px;
+            background: rgba(0, 0, 0, 0.8);
+            color: #fff;
+            border-radius: 2px;
+            pointer-events: none;
+        }
+    </style>
 </head>
- 
+
 <body>
-  <div id="chart"></div>
-  <div id="error" style="color: red;"></div>
-  <!-- Link to external JavaScript file -->
-  <script src="sankey-diagram.js"></script>
+    <div id="chart"></div>
+    <div id="error" style="color: red;"></div>
+    <!-- Link to external JavaScript file -->
+    <script src="sankey-diagram.js"></script>
 </body>
- 
+
 </html>

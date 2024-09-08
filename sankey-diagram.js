@@ -1,33 +1,35 @@
+
+
 document.addEventListener("DOMContentLoaded", function () {
   console.log("DOM loaded");
   try {
     if (typeof d3 === "undefined") throw new Error("D3 library is not loaded");
     if (typeof d3.sankey === "undefined")
       throw new Error("D3 Sankey plugin is not loaded");
- 
+
     // Load data from an external JSON file
     d3.json("flow_data.json")
       .then(function (data) {
         // Group data by unique source themes
         const themes = Array.from(new Set(data.map((d) => d.source_theme)));
- 
+
         themes.forEach((theme) => {
           let margin = { top: 10, right: 10, bottom: 10, left: 10 };
           let width = 1100 - margin.left - margin.right;
           const height = 600 - margin.top - margin.bottom;
- 
+
           // Filter data for the current theme
           const themeData = data.filter((d) => d.source_theme === theme);
- 
+
           // Create a container for each Sankey diagram
           const container = d3
             .select("#chart")
             .append("div")
             .attr("class", "theme-container");
- 
+
           // Add a title for the theme
           container.append("h2").text(`Sankey Diagram for Theme: ${theme}`);
- 
+
           // Create an SVG for the Sankey diagram
           const svg = container
             .append("svg")
@@ -40,17 +42,38 @@ document.addEventListener("DOMContentLoaded", function () {
             )
             .append("g")
             .attr("transform", `translate(${margin.left},${margin.top})`);
- 
+
+          // Inside your DOMContentLoaded event listener, after creating the svg element:
+          const nodeTooltip = tooltip()
+            .html((d) => {
+              return `
+                <strong>${d.name}</strong><br>
+                Total Funding In: $${d.fundingIn.toFixed(2)}M<br>
+                Total Funding Out: $${d.fundingOut.toFixed(2)}M<br>
+                Target Funding: $${d.targetFunding.toFixed(2)}M
+              `;
+            });
+
+          const linkTooltip = tooltip()
+            .html((d) => {
+              return `
+                <strong>${d.source.name} → ${d.target.name}</strong><br>
+                Value: $${d.value.toFixed(2)}M<br>
+                Source Funding: $${d.source_funding.toFixed(2)}M<br>
+                Target Funding: $${d.target_funding.toFixed(2)}M
+              `;
+            });
+
           // Create a color scale for the nodes
           const targetColorScale = d3.scaleOrdinal(d3.schemeTableau10);
- 
+
           // Create a set of all unique node names for the current theme
           const nodeNames = new Set();
           themeData.forEach((d) => {
             nodeNames.add(d.source);
             nodeNames.add(d.target);
           });
- 
+
           // Create an array of node objects with funding information
           const nodes = Array.from(nodeNames).map((name) => ({
             name: name,
@@ -58,7 +81,7 @@ document.addEventListener("DOMContentLoaded", function () {
             fundingOut: 0,
             targetFunding: 0, // Add targetFunding to handle final node case
           }));
- 
+
           // Calculate total funding for each node
           themeData.forEach((d) => {
             const sourceNode = nodes.find((n) => n.name === d.source);
@@ -69,12 +92,12 @@ document.addEventListener("DOMContentLoaded", function () {
               targetNode.targetFunding = d.target_funding; // Assign targetFunding for final node
             }
           });
- 
+
           // Create a map of node names to indices
           const nodeMap = new Map(
             nodes.map((node, index) => [node.name, index])
           );
- 
+
           // Map the links to use node indices instead of names
           const links = themeData.map((d) => ({
             source: nodeMap.get(d.source),
@@ -83,7 +106,7 @@ document.addEventListener("DOMContentLoaded", function () {
             source_funding: d.source_funding || 0,
             target_funding: d.target_funding || 0,
           }));
- 
+
           // Create a map of source nodes to their target nodes
           const sourceToTargetMap = new Map();
           links.forEach((link) => {
@@ -92,7 +115,12 @@ document.addEventListener("DOMContentLoaded", function () {
             }
             sourceToTargetMap.get(link.source).push(link.target);
           });
- 
+
+          // Create a tooltip div that is hidden by default
+          const tooltip = d3.select("body").append("div")
+            .attr("class", "d3-tooltip")
+            .style("opacity", 0);
+
           const sankey = d3
             .sankey()
             .nodeWidth(30)
@@ -110,14 +138,14 @@ document.addEventListener("DOMContentLoaded", function () {
               return d3.ascending(aTargets[0], bTargets[0]);
             })
             .nodeId((d) => d.index);
- 
+
           const graph = sankey({
             nodes: nodes.map((d) => Object.assign({}, d)), // Ensure we pass a copy
             links: links.map((d) => Object.assign({}, d)), // Ensure we pass a copy
           });
- 
+
           sankey.nodeSort(null); // disable nodeSort to enable draggable nodes
- 
+
           // Create a map to store the base color for each target node
           const targetColors = new Map();
           graph.nodes.forEach((node) => {
@@ -125,12 +153,12 @@ document.addEventListener("DOMContentLoaded", function () {
               targetColors.set(node.name, targetColorScale(node.name));
             }
           });
- 
+
           // Check if the node is a final node (no outgoing links)
           function isFinalNode(d) {
             return graph.links.every((link) => link.source.index !== d.index);
           }
- 
+
           const link = svg
             .append("g")
             .selectAll(".link")
@@ -139,28 +167,60 @@ document.addEventListener("DOMContentLoaded", function () {
             .append("path")
             .attr("class", "link")
             .attr("d", d3.sankeyLinkHorizontal())
-            .style("stroke-width", (d) => Math.max(1, d.width));
- 
-          const node = svg
-            .append("g")
-            .selectAll(".node")
-            .data(graph.nodes)
-            .enter()
-            .append("g")
-            .attr("class", "node")
-            .attr("transform", (d) => `translate(${d.x0},${d.y0})`)
-            .call(
-              d3
-                .drag()
-                .subject(function (d) {
-                  return d;
-                })
-                .on("start", function () {
-                  this.parentNode.appendChild(this);
-                })
-                .on("drag", dragmove)
-            );
- 
+            .style("stroke-width", (d) => Math.max(1, d.width))
+            .on("mouseover", function(event, d) {
+              tooltip.transition()
+                .duration(200)
+                .style("opacity", .9);
+              tooltip.html(`<strong>${d.source.name} → ${d.target.name}</strong><br>` +
+                          `Value: $${d.value.toFixed(2)}M<br>` +
+                          `Source Funding: $${d.source_funding.toFixed(2)}M<br>` +
+                          `Target Funding: $${d.target_funding.toFixed(2)}M`)
+                .style("left", (event.pageX) + "px")
+                .style("top", (event.pageY - 28) + "px");
+            })
+            .on("mouseout", function(d) {
+              tooltip.transition()
+                .duration(500)
+                .style("opacity", 0);
+            });
+        
+
+            const node = svg
+              .append("g")
+              .selectAll(".node")
+              .data(graph.nodes)
+              .enter()
+              .append("g")
+              .attr("class", "node")
+              .attr("transform", (d) => `translate(${d.x0},${d.y0})`)
+              .call(
+                d3.drag()
+                  .subject(function (d) {
+                    return d;
+                  })
+                  .on("start", function () {
+                    this.parentNode.appendChild(this);
+                  })
+                  .on("drag", dragmove)
+              )
+              .on("mouseover", function(event, d) {
+                tooltip.transition()
+                  .duration(200)
+                  .style("opacity", .9);
+                tooltip.html(`<strong>${d.name}</strong><br>` +
+                            `Total Funding In: $${d.fundingIn.toFixed(2)}M<br>` +
+                            `Total Funding Out: $${d.fundingOut.toFixed(2)}M<br>` +
+                            `Target Funding: $${d.targetFunding.toFixed(2)}M`)
+                  .style("left", (event.pageX) + "px")
+                  .style("top", (event.pageY - 28) + "px");
+              })
+              .on("mouseout", function(d) {
+                tooltip.transition()
+                  .duration(500)
+                  .style("opacity", 0);
+              });
+
           // Create the in-bar with adjusted height
           node
             .append("rect")
@@ -184,7 +244,7 @@ document.addEventListener("DOMContentLoaded", function () {
               return targetColors.get(targetNode.name);
             })
             .attr("opacity", 0.7);
- 
+
           // Create the out-bar or target-funding bar for final nodes
           node
             .append("rect")
@@ -212,7 +272,7 @@ document.addEventListener("DOMContentLoaded", function () {
               return d3.color(targetColor).darker(0.5);
             })
             .attr("opacity", 0.7);
- 
+
           // Create the wrapped bar segments for the final node
           node
             .filter((d) => isFinalNode(d))
@@ -221,10 +281,10 @@ document.addEventListener("DOMContentLoaded", function () {
               const totalHeight = (d.targetFunding / d.fundingIn) * baseHeight;
               const numSegments = Math.ceil(totalHeight / baseHeight);
               const segmentHeight = baseHeight;
- 
+
               // const numSegments = Math.ceil(totalHeight / height);
               // const segmentHeight = height;
- 
+
               for (let i = 0; i < numSegments; i++) {
                 const barHeight = Math.min(
                   segmentHeight,
@@ -244,7 +304,7 @@ document.addEventListener("DOMContentLoaded", function () {
                   .attr("opacity", 0.7);
               }
             });
- 
+
           node
             .append("text")
             .attr("x", (d) => (d.x0 < width / 2 ? 6 + sankey.nodeWidth() : -6))
@@ -258,18 +318,18 @@ document.addEventListener("DOMContentLoaded", function () {
                 return `${d.name}`;
               }
             });
- 
-          node
-            .append("title")
-            .text(
-              (d) =>
-                `${d.name}\nTotal Funding In: $${d.fundingIn.toFixed(
-                  2
-                )}M\nTotal Funding Out: $${d.fundingOut.toFixed(
-                  2
-                )}M\nTarget Funding: $${d.targetFunding.toFixed(2)}M`
-            );
- 
+
+          // node
+          //   .append("title")
+          //   .text(
+          //     (d) =>
+          //       `${d.name}\nTotal Funding In: $${d.fundingIn.toFixed(
+          //         2
+          //       )}M\nTotal Funding Out: $${d.fundingOut.toFixed(
+          //         2
+          //       )}M\nTarget Funding: $${d.targetFunding.toFixed(2)}M`
+          //   );
+
           link
             .append("title")
             .text(
@@ -280,7 +340,7 @@ document.addEventListener("DOMContentLoaded", function () {
                   2
                 )}M\nTarget Funding: $${d.target_funding.toFixed(2)}M`
             );
- 
+
           // The function for moving the nodes
           function dragmove(event, d) {
             d.y0 = Math.max(0, Math.min(height - (d.y1 - d.y0), event.y));
@@ -292,32 +352,32 @@ document.addEventListener("DOMContentLoaded", function () {
             sankey.update(graph);
             link.attr("d", d3.sankeyLinkHorizontal());
           }
- 
+
           // Calculate the scaling factor
           const maxNodeValue = d3.max(graph.nodes, (d) => d.value);
           const maxNodeHeight = d3.max(graph.nodes, (d) => d.y1 - d.y0);
           const scalingFactor = maxNodeHeight / maxNodeValue;
- 
+
           // Calculate the height of a node with a value of 100M
           const legendHeight = 100 * scalingFactor;
- 
+
           // Add legend
           const legend = container
             .append("svg")
             .attr("width", 200)
             .attr("height", legendHeight + 40) // Adjust height to fit the legend
             .attr("class", "legend");
- 
+
           const legendGroup = legend.append("g");
           const legendWidth = sankey.nodeWidth();
- 
+
           legendGroup
             .append("rect")
             .attr("width", legendWidth)
             .attr("height", legendHeight)
             .attr("fill", "#ccc")
             .attr("opacity", 0.7);
- 
+
           legendGroup
             .append("text")
             .attr("x", legendWidth + 10)
@@ -336,4 +396,3 @@ document.addEventListener("DOMContentLoaded", function () {
     document.getElementById("error").textContent = "Error: " + error.message;
   }
 });
- 
